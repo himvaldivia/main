@@ -1089,7 +1089,9 @@ async function scanFunnelTracking(locId, funnelId, btn) {
     // Helper: fetch page HTML via CORS proxy
     async function fetchPageHead(url) {
       const proxies = [
+        `https://corsproxy.io/?${encodeURIComponent(url)}`,
         `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+        `https://thingproxy.freeboard.io/fetch/${url}`,
         `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
       ];
       for (const proxyUrl of proxies) {
