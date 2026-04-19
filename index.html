@@ -903,6 +903,41 @@ async function toggleWFBody(wi) {
 
 
 // ── INJECT TRACKING SCRIPT TO FORM PAGES ─────────────────────
+
+function getFooterScript(locId) {
+  const field = getAcuityField(locId) || 'field:REPLACE_ME';
+  const parts = [
+    '<!-- MARKETING DATA TRACKER -->',
+    '<scr'+'ipt>',
+    '(function() {',
+    "  'use strict';",
+    "  const ACUITY_FIELD_ID = '" + "' + field + '",
+    "  const STORAGE_KEY = 'marketing_json_store';",
+    "  function getBaseUrl(url) { if (!url) return ''; return url.split('?')[0]; }",
+    "  function getUrlParams() { const p={}; new URLSearchParams(window.location.search).forEach((v,k)=>{ if(k!=='full_url_utm'&&k!=='referrer') p[k]=v; }); return p; }",
+    "  function getTrackingCookies() { const c={}; if(document.cookie) document.cookie.split(';').forEach(x=>{ const[k,v]=x.trim().split('='); if(k&&k.match(/_fbc|_fbp|gclid|_ga|ttclid/)) c[k]=decodeURIComponent(v||''); }); return c; }",
+    "  async function captureAndPrepareData() {",
+    "    let s={}; try{s=JSON.parse(sessionStorage.getItem('marketing_json_store')||'{}');}catch(e){}",
+    "    let ip=s.ip||null; if(!ip){try{const r=await fetch('https://api.ipify.org?format=json');ip=(await r.json()).ip;}catch(e){ip='unknown';}}",
+    "    const d={...s,...getUrlParams(),...getTrackingCookies(),referrer:getBaseUrl(document.referrer)||s.referrer||'direct',landing_page:s.landing_page||getBaseUrl(window.location.href),current_page:getBaseUrl(window.location.href),user_agent:navigator.userAgent,screen_res:window.screen.width+'x'+window.screen.height,ip,timestamp:new Date().toISOString()};",
+    "    sessionStorage.setItem('marketing_json_store',JSON.stringify(d)); return JSON.stringify(d);",
+    "  }",
+    "  function injectIntoAcuity(j) {",
+    "    const f=document.querySelector('iframe[src*=\'acuityscheduling.com\']'); if(!f) return false;",
+    "    if(f.getAttribute('data-tracking-injected')==='true') return true;",
+    "    let src=f.src; if(src.includes(ACUITY_FIELD_ID)){f.setAttribute('data-tracking-injected','true');return true;}",
+    "    f.src=src+(src.includes('?')?'&':'?')+ACUITY_FIELD_ID+'='+encodeURIComponent(j);",
+    "    f.setAttribute('data-tracking-injected','true'); return true;",
+    "  }",
+    "  async function init(){const j=await captureAndPrepareData();injectIntoAcuity(j);let a=0;const i=setInterval(()=>{if(injectIntoAcuity(j)||++a>40)clearInterval(i);},500);}",
+    "  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',init); else init();",
+    '})();',
+    '</'+'script>'
+  ];
+  return parts.join('\n');
+}
+
+
 const TRACKING_SCRIPT = `(async () => {
   try {
     const ipPromise = fetch('https://api.ipify.org?format=json').then(r=>r.json()).then(j=>j.ip).catch(()=>'');
@@ -1094,7 +1129,7 @@ async function scanAllPages(locId, funnelId, btn) {
       const slug = (step.slug || step.path || '').replace(/^\//, '');
       const fullUrl = domain && slug ? 'https://' + domain.replace(/^https?:\/\//, '') + '/' + slug : '';
 
-      let hasPixel = false, hasUTM = false, pixelId = '', status = 'no_url', errorMsg = '';
+      let hasPixel = false, hasUTM = false, pixelId = '', status = 'no_url', errorMsg = '', hasFooterScript = false, headSnippet = '';
 
       if (fullUrl) {
         scanEl.innerHTML = '<div style="padding:10px 16px;font-size:12px;"><span class="spinner"></span> Scanning page ' + (si+1) + '/' + steps.length + ': ' + esc(stepName) + '</div>';
@@ -1140,10 +1175,12 @@ async function scanAllPages(locId, funnelId, btn) {
       ${blocked > 0 ? '<span style="background:var(--warning);color:#fff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:50px;">'+blocked+' blocked</span>' : ''}
     </div>`;
 
+    let si = 0;
     results.forEach(r => {
       const wrongPixel = r.pixelId && expectedPixel && r.pixelId !== expectedPixel.pixel;
       const brand = knownPixels[r.pixelId] || '';
 
+      const rowId = 'scanrow-' + funnelId + '-' + si;
       html += `<div style="padding:7px 16px;border-bottom:1px solid var(--border);font-size:11px;">
         <div style="display:flex;align-items:center;gap:8px;">
           <span style="color:${r.status==='ok'?(r.hasPixel?'var(--success)':'var(--error)'):'var(--text3)'};font-weight:700;font-size:13px;flex-shrink:0;">
@@ -1152,20 +1189,26 @@ async function scanAllPages(locId, funnelId, btn) {
           <div style="flex:1;min-width:0;">
             <div style="font-weight:600;margin-bottom:3px;">${esc(r.stepName)}</div>
             ${r.status === 'ok' ? `
-              <div style="display:flex;gap:6px;flex-wrap:wrap;">
+              <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:3px;">
                 ${r.hasPixel
                   ? '<span style="background:rgba(24,119,242,0.1);color:#1877F2;padding:1px 7px;border-radius:50px;font-size:10px;">Pixel: '+r.pixelId+(brand?' ('+brand+')':'')+'</span>'
                   : '<span style="background:rgba(255,59,92,0.1);color:var(--error);padding:1px 7px;border-radius:50px;font-size:10px;">No FB Pixel</span>'}
                 ${r.hasUTM
                   ? '<span style="background:rgba(0,201,122,0.1);color:var(--success);padding:1px 7px;border-radius:50px;font-size:10px;">✓ UTM Script</span>'
                   : '<span style="background:rgba(255,59,92,0.1);color:var(--error);padding:1px 7px;border-radius:50px;font-size:10px;">No UTM Script</span>'}
-                ${wrongPixel ? '<span style="background:rgba(255,170,0,0.1);color:var(--warning);padding:1px 7px;border-radius:50px;font-size:10px;">⚠ Wrong pixel! Expected '+expectedPixel.pixel+'</span>' : ''}
-              </div>` 
+                ${r.hasFooterScript
+                  ? '<span style="background:rgba(0,201,122,0.1);color:var(--success);padding:1px 7px;border-radius:50px;font-size:10px;">✓ Footer Script</span>'
+                  : '<span style="background:rgba(255,59,92,0.1);color:var(--error);padding:1px 7px;border-radius:50px;font-size:10px;">No Footer Script</span>'}
+                ${wrongPixel ? '<span style="background:rgba(255,170,0,0.1);color:var(--warning);padding:1px 7px;border-radius:50px;font-size:10px;">⚠ Wrong pixel!</span>' : ''}
+              </div>
+              <button onclick="toggleScanDetail('${rowId}')" style="background:none;border:1px solid var(--border2);color:var(--text3);font-size:10px;padding:1px 7px;border-radius:50px;cursor:pointer;font-family:var(--font);">View code details</button>
+              <div id="${rowId}" style="display:none;margin-top:6px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px;font-size:10px;font-family:monospace;white-space:pre-wrap;max-height:120px;overflow-y:auto;color:var(--text2);">${esc(r.headSnippet||'')}</div>`
             : `<span style="color:var(--text3);font-size:10px;">${r.status==='cors'?'CORS blocked':r.errorMsg||'No URL'}</span>`}
           </div>
           ${r.fullUrl ? '<a href="'+esc(r.fullUrl)+'" target="_blank" style="font-size:10px;color:var(--accent);flex-shrink:0;">↗</a>' : ''}
         </div>
       </div>`;
+      si++;
     });
 
     scanEl.innerHTML = html;
@@ -1564,6 +1607,11 @@ async function scanPageInFrame(url, btn) {
   }
 }
 
+
+function toggleScanDetail(id) {
+  const el = document.getElementById(id);
+  if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
 
 function copyTrackingScript(btn) {
   const script = '<script>\n' + TRACKING_SCRIPT + '\n<\/script>';
@@ -2413,6 +2461,81 @@ async function aplicarInline(locId) {
 // STEP 3
 const CV_FOLDERS = {"Before and After imgs (GENERAL)": ["Before and After Face 1", "Before and After Face 2", "Before and After Face 3", "Before and After Face 4", "Before and After Face 5", "Before and After Face 6", "Before and After Face 7"], "Before and After imgs (SEPARATE IMAGES)": ["After Face 1", "After Face 2", "After Face 3", "Before Face 1", "Before Face 2", "Before Face 3"], "Client Folder": ["API KEY FOR SUB-LOCATION", "Availability_Client", "Body Duration", "Client Address", "Client Address Directions", "Client Address-Parking", "Client Logo", "Domain", "FTB customer service email", "Location ID", "Location Name", "Location PIXEL ID", "Location Phone", "Main Email Address", "Main Phone Number", "Map Client Address", "Natural Facelift Duration", "OPPO TAG FILED ID FOR SUB-LOCATION", "Spa Photos", "Spa-photo1", "Spa-photo2", "Spa-photo3", "Spa-photo4", "Spa-photo5", "Workflow-Fresh Leads", "Workflow-Negative", "Workflow-Positive", "city/state banner"], "Location Photos": ["Location Photo 5", "Location Photo 6", "Location Photo 7", "Location photo 1", "Location photo 2", "Location photo 3", "Location photo 4"], "Privacy Policy and Terms": ["Privacy Policy", "Terms and Conditions"], "Reviews (GENERAL)": ["Desktop Testimoial Thumbnail Link 1", "Desktop Testimoial Thumbnail Link 2", "Desktop Testimoial Thumbnail Link 3", "Desktop Testimoial Thumbnail Link 4", "Desktop Testimoial Thumbnail Link 5", "Desktop Testimoial Video Link 1", "Desktop Testimoial Video Link 2", "Desktop Testimoial Video Link 3", "Desktop Testimoial Video Link 4", "Desktop Testimoial Video Link 5", "General review 1", "General review 2", "General review 3", "General review 4", "Mobile Testimoial Video Link 1", "Mobile Testimoial Video Link 2", "Mobile Testimoial Video Link 3", "Mobile Testimoial Video Link 4", "Mobile Testimoial Video Link 5", "Mobile Testimoial Thumbnail Link 1", "Mobile Testimoial Thumbnail Link 2", "Mobile Testimoial Thumbnail Link 3", "Mobile Testimoial Thumbnail Link 4", "Mobile Testimoial Thumbnail Link 5", "Txt General review 1", "Txt General review 2", "Txt General review 3", "Txt General review 4", "Txt General review 5"], "Reviews (LOCATION SPECIFIC)": ["Location review 1", "Location review 2", "Location review 3"]};
 
+
+const ACUITY_FIELDS = {
+  "Skin Totale MedSpa Orange": "field:17647173",
+  "Natural Blossom by Adore": "field:18131072",
+  "Esthetix Raleigh": "field:18204354",
+  "Forest Hill Cosmetic Clinic": "field:18077481",
+  "Soap Tree Omaha": "field:17868054",
+  "TKO Beauty Tech - Spa": "field:17868565",
+  "Adore Cookstown": "field:18246594",
+  "Beauty Lounge": "field:17820134",
+  "Below Zero Alpharetta": "field:17727459",
+  "Ben's Beauty Pasadena": "field:17764767",
+  "Mize Med Spa and Wellness Center": "field:17856103",
+  "Gentle Touch Beauty": "field:17967161",
+  "Glameria": "field:17794690",
+  "Good Life Spa": "field:17845579",
+  "Kristals Cosmetics Burlington": "field:18028739",
+  "Meital Studios Beauty Centre": "field:17939209",
+  "Moana Crystals": "field:17806511",
+  "Nova Aesthetic": "field:17734736",
+  "Oasis Aesthetic Spa Henderson": "field:17725285",
+  "Oasis Aesthetics Spa Ness": "field:18207995",
+  "Ora Medical Spa": "field:17818365",
+  "Parie Med Spa": "field:17727242",
+  "Renova Skin Med Spa": "field:18047668",
+  "Skin Analytics": "field:18168883",
+  "Ben’s Beauty Irvine": "field:17756744",
+  "Velora Med Spa": "field:17818741",
+  "Prime Clinic": "field:17738890",
+  "Florentine Skincare & Cosmetics": "field:18350492",
+  "Terra Alma Clinic": "field:17702364",
+  "Skin Totale Spa San Juan": "field:17710774",
+  "Minarelle": "field:18008561",
+  "Tesoro Mio Spa": "field:17870948",
+  "Queen Bee": "field:18131415",
+  "Elysium Cosmetic Clinics": "field:17869569",
+  "Pura Vida": "field:17794690",
+  "Queen Bee Limited Greenwood": "field:17804134",
+  "Dermalogy Med Spa": "field:17819500",
+  "Equanimity Wellness Studio": "field:17878391",
+  "FIL Fall In Love": "field:17960709",
+  "Premier Naples": "field:18008063",
+  "Chantel Beauty Spa": "field:18012918",
+  "Nova Aesthetic Oakville": "field:17734736",
+  "Solei Beauty Lounge": "field:18079721",
+  "Beauty Affairs MediSpa Brookvale": "field:18093091",
+  "Beauty Affairs MediSpa CBD": "field:18095913",
+  "Aeternitas": "field:18100698",
+  "Blesseli Med Spa": "field:18170537",
+  "Hermetise": "field:18215750",
+  "Donna Ella Spa": "field:18226723",
+  "Oasis Aesthetics St. Mary's": "field:18227460",
+  "Joli Visage Naples": "field:18227754",
+  "Oasis Aesthetics Spa Marine": "field:18255571",
+  "Below Zero Rochester": "field:18255755",
+  "VillaGio Spa": "field:18287867",
+  "Solei Beauty Lounge MO": "field:18300960",
+  "Auraderma Spa": "field:18362479",
+  "Oasis Boutique": "field:18337574",
+  "The Beauty Lab": "field:17794690",
+  "Minnesota Aesthetic Center": "field:18354128"
+};
+
+function getAcuityField(locId) {
+  const loc = allLocs.find(l => l.id === locId);
+  const name = loc ? (loc.name || loc.businessName || '') : '';
+  // Try exact match first
+  if (ACUITY_FIELDS[name]) return ACUITY_FIELDS[name];
+  // Try fuzzy match
+  const nl = name.toLowerCase();
+  for (const [k, v] of Object.entries(ACUITY_FIELDS)) {
+    if (nl.includes(k.toLowerCase()) || k.toLowerCase().includes(nl)) return v;
+  }
+  return '';
+}
 const CV_KEY_MAP = {"Before and After Face 1": "before_and_after_face_1", "Before and After Face 2": "before_and_after_face_2", "Before and After Face 3": "before_and_after_face_3", "Before and After Face 4": "before_and_after_face_4", "Before and After Face 5": "before_and_after_face_5", "Before and After Face 6": "before_and_after_face_6", "Before and After Face 7": "before_and_after_face_7", "After Face 1": "after_face_1", "After Face 2": "after_face_2", "After Face 3": "after_face_3", "Before Face 1": "before_face_1", "Before Face 2": "before_face_2", "Before Face 3": "before_face_3", "API KEY FOR SUB-LOCATION": "api_key_for_sublocation", "Availability_Client": "availability_client", "Body Duration": "body_duration", "Client Address": "client_address", "Client Address Directions": "client_address_directions", "Client Address-Parking": "client_addressparking", "Client Logo": "client_logo", "Domain": "domain", "FTB customer service email": "ftb_customer_service_email", "Location ID": "location_id", "Location Name": "location_name", "Location PIXEL ID": "location_pixel_id", "Location Phone": "location_phone", "Main Email Address": "main_email_address", "Main Phone Number": "main_phone_number", "Map Client Address": "map_client_address", "Natural Facelift Duration": "natural_facelift_duration", "OPPO TAG FILED ID FOR SUB-LOCATION": "oppo_tag_filed_id_for_sublocation", "Spa Photos": "spa_photos", "Spa-photo1": "spaphoto1", "Spa-photo2": "spaphoto2", "Spa-photo3": "spaphoto3", "Spa-photo4": "spaphoto4", "Spa-photo5": "spaphoto5", "Workflow-Fresh Leads": "workflowfresh_leads", "Workflow-Negative": "workflownegative", "Workflow-Positive": "workflowpositive", "city/state banner": "citystate_banner", "Location Photo 5": "location_photo_5", "Location Photo 6": "location_photo_6", "Location Photo 7": "location_photo_7", "Location photo 1": "location_photo_1", "Location photo 2": "location_photo_2", "Location photo 3": "location_photo_3", "Location photo 4": "location_photo_4", "Privacy Policy": "privacy_policy", "Terms and Conditions": "terms_and_conditions", "Desktop Testimoial Thumbnail Link 1": "desktop_testimoial_thumbnail_link_1", "Desktop Testimoial Thumbnail Link 2": "desktop_testimoial_thumbnail_link_2", "Desktop Testimoial Thumbnail Link 3": "desktop_testimoial_thumbnail_link_3", "Desktop Testimoial Thumbnail Link 4": "desktop_testimoial_thumbnail_link_4", "Desktop Testimoial Thumbnail Link 5": "desktop_testimoial_thumbnail_link_5", "Desktop Testimoial Video Link 1": "desktop_testimoial_video_link_1", "Desktop Testimoial Video Link 2": "desktop_testimoial_video_link_2", "Desktop Testimoial Video Link 3": "desktop_testimoial_video_link_3", "Desktop Testimoial Video Link 4": "desktop_testimoial_video_link_4", "Desktop Testimoial Video Link 5": "desktop_testimoial_video_link_5", "General review 1": "general_review_1", "General review 2": "general_review_2", "General review 3": "general_review_3", "General review 4": "general_review_4", "Mobile Testimoial Video Link 1": "mobile_testimoial_video_link_1", "Mobile Testimoial Video Link 2": "mobile_testimoial_video_link_2", "Mobile Testimoial Video Link 3": "mobile_testimoial_video_link_3", "Mobile Testimoial Video Link 4": "mobile_testimoial_video_link_4", "Mobile Testimoial Video Link 5": "mobile_testimoial_video_link_5", "Mobile Testimoial Thumbnail Link 1": "mobile_testimoial_thumbnail_link_1", "Mobile Testimoial Thumbnail Link 2": "mobile_testimoial_thumbnail_link_2", "Mobile Testimoial Thumbnail Link 3": "mobile_testimoial_thumbnail_link_3", "Mobile Testimoial Thumbnail Link 4": "mobile_testimoial_thumbnail_link_4", "Mobile Testimoial Thumbnail Link 5": "mobile_testimoial_thumbnail_link_5", "Txt General review 1": "txt_general_review_1", "Txt General review 2": "txt_general_review_2", "Txt General review 3": "txt_general_review_3", "Txt General review 4": "txt_general_review_4", "Txt General review 5": "txt_general_review_5", "Location review 1": "location_review_1", "Location review 2": "location_review_2", "Location review 3": "location_review_3"};
 const CV_FOLDER_ORDER = ["Before and After imgs (GENERAL)", "Before and After imgs (SEPARATE IMAGES)", "Client Folder", "Location Photos", "Privacy Policy and Terms", "Reviews (GENERAL)", "Reviews (LOCATION SPECIFIC)"];
 
@@ -3063,6 +3186,7 @@ function renderLocs(list) {
         <div class="tok-row" style="flex-wrap:wrap;gap:6px;">
           <input class="tok-input" type="password" id="ti-${l.id}" placeholder="pit-... (sub-account token)" value="${esc(tok)}" autocomplete="off" style="flex:1;min-width:180px;">
           <input class="tok-input" type="text" id="di-${l.id}" placeholder="Domain e.g. mysite.advancedbeautytreatments.com" value="${esc(getDomain(l.id))}" autocomplete="off" style="flex:1;min-width:180px;font-family:var(--font);">
+          <div style="font-size:10px;color:var(--text3);padding:2px 4px;width:100%;">Acuity Field: <strong style="color:var(--accent);">${getAcuityField(l.id) || 'Not found — check CSV'}</strong></div>
           <button class="btn btn-sm" onclick="guardarToken(\'${l.id}\')">Save</button>
           ${tok ? `<button class="btn btn-ghost btn-sm" onclick="removeToken(\'${l.id}\')">Remove</button>` : ''}
         </div>
