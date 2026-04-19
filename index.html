@@ -1139,8 +1139,12 @@ async function scanAllPages(locId, funnelId, btn) {
             const html = await resp.text();
             hasPixel = html.includes('fbq(') || html.includes('fbevents.js') || html.includes('Meta Pixel');
             hasUTM = html.includes('user_ip_address') || html.includes('fbclid');
+            hasFooterScript = html.includes('MARKETING DATA TRACKER') || html.includes('ACUITY_FIELD_ID') || html.includes('acuityscheduling.com');
             const pm = html.match(/fbq\('init',\s*['"]?(\d+)['"]?\)/);
             pixelId = pm ? pm[1] : '';
+            // Extract head snippet
+            const hm = html.match(/<head[^>]*>([\s\S]*?)<\/head>/i);
+            headSnippet = hm ? hm[1].replace(/<style[\s\S]*?<\/style>/gi,'').replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim().slice(0,400) : '';
             status = 'ok';
           } else {
             status = 'error';
