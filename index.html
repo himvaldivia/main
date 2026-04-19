@@ -439,7 +439,7 @@ input::placeholder{color:var(--text3);}
   <button id="btnSF" style="display:none;"></button>
   <div class="panel" id="panel-sf">
     <div class="page-hdr">
-      <div><h2>Sites &amp; Funnels</h2><p>View funnel steps and links per sub-account</p></div>
+      <div><h2>Sites &amp; Funnels</h2><p>View funnel steps and links per sub-account — <a href="#" onclick="showBookmarklet();return false;" style="color:var(--accent);font-weight:600;">Get Page Scanner Bookmarklet</a></p></div>
     </div>
     <div class="sf-tabs" id="sfTabs"></div>
     <div id="sfPixelBar" style="display:none;align-items:center;gap:10px;padding:8px 14px;background:rgba(24,119,242,0.05);border:1.5px solid rgba(24,119,242,0.15);border-radius:10px;margin-bottom:10px;flex-wrap:wrap;"></div>
@@ -1335,6 +1335,139 @@ async function injectPageTracking(locId, pageId, pageName, btn) {
     btn.textContent = orig;
     btn.disabled = false;
   }
+}
+
+
+function showBookmarklet() {
+  let modal = document.getElementById('bookmarkletModal');
+  if (modal) { modal.style.display = 'flex'; return; }
+  
+  modal = document.createElement('div');
+  modal.id = 'bookmarkletModal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:9999;';
+  
+  const bookmarkletUrl = `javascript:(function(){var head=document.head.innerHTML;var body=document.body.innerHTML;var full=head+body;var hasPixel=full.includes('fbq(')||full.includes('fbevents')||full.includes('Meta Pixel');var hasUTM=full.includes('user_ip_address')||full.includes('fbclid');var pixelMatch=full.match(/fbq\\('init',\\s*['"]?(\\d+)['"]?\\)/);var pixelId=pixelMatch?pixelMatch[1]:'';var knownPixels={'1180664739949233':'First Touch Beauty','540031443835405':'No Needle Needed','819221296693583':'Adv Beauty Treatments'};var brand=pixelId?(knownPixels[pixelId]||'Unknown'):'';var msg='=== GHL PAGE SCAN ===\\n'+'Page: '+document.title+'\\n\\n'+'FB PIXEL: '+(hasPixel?'YES - '+pixelId+' ('+brand+')':'MISSING')+'\\n'+'UTM SCRIPT: '+(hasUTM?'YES':'MISSING')+'\\n'+((!hasPixel||!hasUTM)?'\\n MISSING TRACKING!':'\\n All tracking present');alert(msg);})();`;
+
+  modal.innerHTML = `<div style="background:var(--surface);border-radius:16px;padding:28px;max-width:480px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.3);">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+      <h3 style="font-size:16px;font-weight:700;margin:0;">Page Scanner Bookmarklet</h3>
+      <button onclick="document.getElementById('bookmarkletModal').style.display='none'" 
+        style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text3);">✕</button>
+    </div>
+    <p style="font-size:13px;color:var(--text2);margin-bottom:16px;">
+      Drag the button below to your browser bookmarks bar. Then open any GHL funnel page and click the bookmark to instantly see if it has the FB Pixel and UTM script.
+    </p>
+    <div style="background:var(--surface2);border:2px dashed var(--accent);border-radius:12px;padding:20px;text-align:center;margin-bottom:16px;">
+      <a href="${bookmarkletUrl}" 
+        style="background:var(--accent);color:#fff;padding:10px 24px;border-radius:50px;font-weight:700;font-size:14px;text-decoration:none;display:inline-block;">
+        🔍 Scan Page Tracking
+      </a>
+      <p style="font-size:11px;color:var(--text3);margin-top:10px;">← Drag this to your bookmarks bar</p>
+    </div>
+    <div style="font-size:12px;color:var(--text2);">
+      <strong>How to use:</strong>
+      <ol style="margin:8px 0;padding-left:18px;line-height:2;">
+        <li>Drag the button above to your browser bookmarks bar</li>
+        <li>Open any funnel page in GHL</li>
+        <li>Click the bookmark</li>
+        <li>See instantly: FB Pixel ✓/✗, Pixel ID, UTM Script ✓/✗</li>
+      </ol>
+    </div>
+  </div>`;
+  
+  modal.addEventListener('click', e => { if (e.target === modal) modal.style.display = 'none'; });
+  document.body.appendChild(modal);
+}
+
+
+function scanPageInFrame(url, btn) {
+  // Create hidden iframe to load page, then read its document
+  const orig = btn.textContent;
+  btn.textContent = '...';
+  btn.disabled = true;
+
+  // Show result inline
+  const pageRow = btn.closest('.sf-page');
+  let resultEl = pageRow ? pageRow.nextElementSibling : null;
+  if (resultEl && resultEl.id && resultEl.id.startsWith('pstats-')) {
+    resultEl.style.display = 'block';
+    resultEl.innerHTML = '<span class="spinner"></span> Loading page...';
+  }
+
+  // Create iframe
+  const iframe = document.createElement('iframe');
+  iframe.style.cssText = 'position:fixed;left:-9999px;top:-9999px;width:1px;height:1px;visibility:hidden;';
+  iframe.src = url;
+  
+  const timeout = setTimeout(() => {
+    cleanup();
+    showResult(null, 'Timeout — page took too long to load');
+  }, 15000);
+
+  function cleanup() {
+    clearTimeout(timeout);
+    if (iframe.parentNode) document.body.removeChild(iframe);
+    btn.textContent = orig;
+    btn.disabled = false;
+  }
+
+  function showResult(doc, errorMsg) {
+    if (!resultEl) { cleanup(); return; }
+    
+    if (errorMsg || !doc) {
+      resultEl.innerHTML = '<span style="color:var(--warning);">⚠ ' + esc(errorMsg || 'Could not read page') + '</span>';
+      return;
+    }
+
+    try {
+      const html = doc.documentElement.innerHTML;
+      const head = doc.head ? doc.head.innerHTML : '';
+      const body = doc.body ? doc.body.innerHTML : '';
+      const full = head + body;
+
+      const hasPixel = full.includes('fbq(') || full.includes('fbevents') || full.includes('Meta Pixel');
+      const hasUTM = full.includes('user_ip_address') || full.includes('fbclid');
+      const pixelMatch = full.match(/fbq\('init',\s*['"]?(\d+)['"]?\)/);
+      const pixelId = pixelMatch ? pixelMatch[1] : '';
+
+      const knownPixels = {
+        '1180664739949233': 'First Touch Beauty',
+        '540031443835405': 'No Needle Needed',
+        '819221296693583': 'Adv Beauty Treatments'
+      };
+      const brand = pixelId ? (knownPixels[pixelId] || 'Unknown') : '';
+
+      resultEl.innerHTML = `
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+          <span style="font-weight:700;color:${hasPixel?'var(--success)':'var(--error)'};">
+            ${hasPixel ? '✓ FB Pixel' : '✗ No FB Pixel'}
+          </span>
+          ${pixelId ? '<span style="font-size:11px;background:rgba(24,119,242,0.1);color:#1877F2;padding:2px 8px;border-radius:50px;">'+pixelId+' — '+brand+'</span>' : ''}
+          <span style="font-weight:700;color:${hasUTM?'var(--success)':'var(--warning)'};">
+            ${hasUTM ? '✓ UTM Script' : '⚠ No UTM Script'}
+          </span>
+        </div>`;
+    } catch(e) {
+      resultEl.innerHTML = '<span style="color:var(--warning);">⚠ Could not read page content (cross-origin)</span>';
+    }
+  }
+
+  iframe.onload = function() {
+    try {
+      const doc = iframe.contentDocument || iframe.contentWindow.document;
+      showResult(doc, null);
+    } catch(e) {
+      showResult(null, 'Cross-origin blocked — page loaded but cannot be read');
+    }
+    cleanup();
+  };
+
+  iframe.onerror = function() {
+    showResult(null, 'Page failed to load');
+    cleanup();
+  };
+
+  document.body.appendChild(iframe);
 }
 
 function copyTrackingScript(btn) {
@@ -2594,7 +2727,7 @@ async function loadSF(locId, tabEl) {
               <div class="sf-page-name">${esc(stepName)}</div>
             </div>
             <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
-              <button class="copy-btn" onclick="loadPageStats('${locId}','${esc(stepSlug)}','${esc(fullUrl||stepSlug)}',this)" style="border-color:var(--accent);color:var(--accent);">Stats</button>
+              ${fullUrl ? `<button class="copy-btn" style="border-color:var(--accent);color:var(--accent);" onclick="scanPageInFrame('${fullUrl}',this)">Scan</button>` : ''}
               ${fullUrl
                 ? `<span class="sf-page-link" onclick="window.open('${fullUrl}','_blank')" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(fullUrl)}</span>
                    <button class="copy-btn" onclick="copyLink('${fullUrl}',this)">Copy</button>`
