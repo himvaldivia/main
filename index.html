@@ -1157,7 +1157,7 @@ async function scanAllPages(locId, funnelId, btn) {
         await sleep(400);
       }
 
-      results.push({ stepName, fullUrl, hasPixel, hasUTM, pixelId, status, errorMsg });
+      results.push({ stepName, fullUrl, hasPixel, hasUTM, pixelId, status, errorMsg, hasFooterScript, headSnippet });
     }
 
     // Build results
