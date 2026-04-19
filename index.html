@@ -1058,6 +1058,110 @@ async function saveFunnelSettings(locId, funnelId) {
   }
 }
 
+
+async function scanAllPages(locId, funnelId, btn) {
+  const scanEl = document.getElementById('scan-status-' + funnelId);
+  if (!scanEl) return;
+
+  if (scanEl.style.display !== 'none') {
+    scanEl.style.display = 'none';
+    btn.textContent = 'Scan All';
+    return;
+  }
+
+  btn.textContent = '...';
+  btn.disabled = true;
+  scanEl.style.display = 'block';
+  scanEl.innerHTML = '<div style="padding:10px 16px;font-size:12px;"><span class="spinner"></span> Scanning pages...</div>';
+
+  try {
+    const tok = getToken(locId);
+    const fd = await apiFetch(tok, 'GET', '/funnels/funnel/list?locationId=' + locId + '&limit=100');
+    const funnels = fd.funnels || fd.data || fd.list || fd.items || [];
+    const funnel = funnels.find(f => (f.id||f._id) === funnelId);
+    if (!funnel) { scanEl.innerHTML = '<div style="padding:10px;color:var(--error);">Funnel not found</div>'; return; }
+
+    const steps = funnel.steps || [];
+    const domain = getDomain(locId) || '';
+    const expectedPixel = getPixelForDomain(domain);
+    const results = [];
+
+    for (const step of steps) {
+      const stepName = step.name || step.title || 'Page';
+      const slug = (step.slug || step.path || '').replace(/^\//, '');
+      const fullUrl = domain && slug ? 'https://' + domain.replace(/^https?:\/\//, '') + '/' + slug : '';
+
+      let hasPixel = false, hasUTM = false, pixelId = '', status = 'no_url';
+
+      if (fullUrl) {
+        try {
+          const resp = await fetch(fullUrl, { cache: 'no-store', credentials: 'omit' });
+          if (resp.ok) {
+            const html = await resp.text();
+            hasPixel = html.includes('fbq(') || html.includes('fbevents.js');
+            hasUTM = html.includes('user_ip_address') || html.includes('fbclid');
+            const pm = html.match(/fbq\('init',\s*['"]?(\d+)['"]?\)/);
+            pixelId = pm ? pm[1] : '';
+            status = 'ok';
+          } else {
+            status = 'error_' + resp.status;
+          }
+        } catch(e) {
+          status = 'cors';
+        }
+        await sleep(300);
+      }
+
+      results.push({ stepName, fullUrl, hasPixel, hasUTM, pixelId, status });
+    }
+
+    const withPixel = results.filter(r => r.hasPixel).length;
+    const withUTM = results.filter(r => r.hasUTM).length;
+    const scanned = results.filter(r => r.status === 'ok').length;
+    const corsBlocked = results.filter(r => r.status === 'cors').length;
+
+    let html = `<div style="padding:8px 16px;background:var(--surface2);border-bottom:1px solid var(--border);display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+      <span style="font-size:12px;font-weight:700;">Page Scan</span>
+      ${scanned > 0 ? '<span style="background:var(--success);color:#fff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:50px;">✓ '+withPixel+'/'+scanned+' pixel</span>' : ''}
+      ${scanned > 0 ? '<span style="background:#1877F2;color:#fff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:50px;">'+withUTM+'/'+scanned+' UTM</span>' : ''}
+      ${corsBlocked > 0 ? '<span style="background:var(--warning);color:#fff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:50px;">'+corsBlocked+' blocked</span>' : ''}
+    </div>`;
+
+    results.forEach(r => {
+      if (r.status === 'cors' || r.status === 'no_url') {
+        html += `<div style="display:flex;align-items:center;gap:8px;padding:6px 16px;border-bottom:1px solid var(--border);font-size:11px;">
+          <span style="color:var(--text3);">?</span>
+          <span style="flex:1;">${esc(r.stepName)}</span>
+          <span style="color:var(--text3);font-size:10px;">${r.status === 'cors' ? 'CORS blocked' : 'No URL'}</span>
+          ${r.fullUrl ? '<a href="'+esc(r.fullUrl)+'" target="_blank" style="font-size:10px;color:var(--accent);">Open ↗</a>' : ''}
+        </div>`;
+        return;
+      }
+
+      const wrongPixel = r.pixelId && expectedPixel && r.pixelId !== expectedPixel.pixel;
+      html += `<div style="display:flex;align-items:center;gap:8px;padding:6px 16px;border-bottom:1px solid var(--border);font-size:11px;">
+        <span style="color:${r.hasPixel?'var(--success)':'var(--error)'};font-weight:700;">${r.hasPixel?'✓':'✗'}</span>
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:600;">${esc(r.stepName)}</div>
+          <div style="display:flex;gap:6px;margin-top:2px;flex-wrap:wrap;">
+            ${r.pixelId ? '<span style="color:#1877F2;font-size:10px;">Pixel: '+r.pixelId+'</span>' : '<span style="color:var(--error);font-size:10px;">No pixel</span>'}
+            <span style="color:${r.hasUTM?'var(--success)':'var(--error)'};font-size:10px;">${r.hasUTM?'✓ UTM':'✗ UTM'}</span>
+            ${wrongPixel ? '<span style="color:var(--warning);font-size:10px;">⚠ Wrong pixel!</span>' : ''}
+          </div>
+        </div>
+        ${r.fullUrl ? '<a href="'+esc(r.fullUrl)+'" target="_blank" style="font-size:10px;color:var(--accent);">↗</a>' : ''}
+      </div>`;
+    });
+
+    scanEl.innerHTML = html;
+  } catch(e) {
+    scanEl.innerHTML = '<div style="padding:10px 16px;font-size:12px;color:var(--error);">Error: ' + esc(e.message) + '</div>';
+  } finally {
+    btn.textContent = 'Scan All';
+    btn.disabled = false;
+  }
+}
+
 async function scanFunnelTracking(locId, funnelId, btn) {
   const tok = getToken(locId);
   if (!tok) { showToast('No token'); return; }
@@ -1380,164 +1484,70 @@ function showBookmarklet() {
 }
 
 
-function scanPageInFrame(url, btn) {
-  // Create hidden iframe to load page, then read its document
-  const orig = btn.textContent;
+async function scanPageInFrame(url, btn) {
+  const pageRow = btn.closest('.sf-page');
+  let resultEl = pageRow ? pageRow.nextElementSibling : null;
+  
+  if (resultEl && resultEl.style.display !== 'none') {
+    resultEl.style.display = 'none';
+    btn.textContent = 'Scan';
+    return;
+  }
+
+  if (resultEl) {
+    resultEl.style.display = 'block';
+    resultEl.innerHTML = '<span class="spinner"></span> Fetching page...';
+  }
+
   btn.textContent = '...';
   btn.disabled = true;
 
-  // Show result inline
-  const pageRow = btn.closest('.sf-page');
-  let resultEl = pageRow ? pageRow.nextElementSibling : null;
-  if (resultEl && resultEl.id && resultEl.id.startsWith('pstats-')) {
-    resultEl.style.display = 'block';
-    resultEl.innerHTML = '<span class="spinner"></span> Loading page...';
-  }
+  try {
+    const resp = await fetch(url, {
+      method: 'GET',
+      cache: 'no-store',
+      credentials: 'omit'
+    });
 
-  // Create iframe
-  const iframe = document.createElement('iframe');
-  iframe.style.cssText = 'position:fixed;left:-9999px;top:-9999px;width:1px;height:1px;visibility:hidden;';
-  iframe.src = url;
-  
-  const timeout = setTimeout(() => {
-    cleanup();
-    showResult(null, 'Timeout — page took too long to load');
-  }, 15000);
-
-  function cleanup() {
-    clearTimeout(timeout);
-    if (iframe.parentNode) document.body.removeChild(iframe);
-    btn.textContent = orig;
-    btn.disabled = false;
-  }
-
-  function showResult(doc, errorMsg) {
-    if (!resultEl) { cleanup(); return; }
-    
-    if (errorMsg || !doc) {
-      resultEl.innerHTML = '<span style="color:var(--warning);">⚠ ' + esc(errorMsg || 'Could not read page') + '</span>';
+    if (!resp.ok) {
+      if (resultEl) resultEl.innerHTML = '<span style="color:var(--error);">HTTP ' + resp.status + ' — cannot read page</span>';
       return;
     }
 
-    try {
-      const html = doc.documentElement.innerHTML;
-      const head = doc.head ? doc.head.innerHTML : '';
-      const body = doc.body ? doc.body.innerHTML : '';
-      const full = head + body;
+    const html = await resp.text();
 
-      const hasPixel = full.includes('fbq(') || full.includes('fbevents') || full.includes('Meta Pixel');
-      const hasUTM = full.includes('user_ip_address') || full.includes('fbclid');
-      const pixelMatch = full.match(/fbq\('init',\s*['"]?(\d+)['"]?\)/);
-      const pixelId = pixelMatch ? pixelMatch[1] : '';
+    // Check for pixel and UTM
+    const hasPixel = html.includes('fbq(') || html.includes('fbevents.js') || html.includes('Meta Pixel');
+    const hasUTM = html.includes('user_ip_address') || html.includes('fbclid');
+    const pixelMatch = html.match(/fbq\('init',\s*['"]?(\d+)['"]?\)/);
+    const pixelId = pixelMatch ? pixelMatch[1] : '';
+    const knownPixels = {
+      '1180664739949233': 'First Touch Beauty',
+      '540031443835405': 'No Needle Needed',
+      '819221296693583': 'Adv Beauty Treatments'
+    };
+    const brand = knownPixels[pixelId] || '';
 
-      const knownPixels = {
-        '1180664739949233': 'First Touch Beauty',
-        '540031443835405': 'No Needle Needed',
-        '819221296693583': 'Adv Beauty Treatments'
-      };
-      const brand = pixelId ? (knownPixels[pixelId] || 'Unknown') : '';
-
+    if (resultEl) {
       resultEl.innerHTML = `
         <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
           <span style="font-weight:700;color:${hasPixel?'var(--success)':'var(--error)'};">
             ${hasPixel ? '✓ FB Pixel' : '✗ No FB Pixel'}
           </span>
-          ${pixelId ? '<span style="font-size:11px;background:rgba(24,119,242,0.1);color:#1877F2;padding:2px 8px;border-radius:50px;">'+pixelId+' — '+brand+'</span>' : ''}
-          <span style="font-weight:700;color:${hasUTM?'var(--success)':'var(--warning)'};">
-            ${hasUTM ? '✓ UTM Script' : '⚠ No UTM Script'}
+          ${pixelId ? '<span style="font-size:11px;background:rgba(24,119,242,0.1);color:#1877F2;padding:2px 8px;border-radius:50px;">' + pixelId + (brand?' — '+brand:'') + '</span>' : ''}
+          <span style="font-weight:700;color:${hasUTM?'var(--success)':'var(--error)'};">
+            ${hasUTM ? '✓ UTM Script' : '✗ No UTM Script'}
           </span>
         </div>`;
-    } catch(e) {
-      resultEl.innerHTML = '<span style="color:var(--warning);">⚠ Could not read page content (cross-origin)</span>';
     }
+  } catch(e) {
+    if (resultEl) resultEl.innerHTML = '<span style="color:var(--error);">Error: ' + esc(e.message) + '</span>';
+  } finally {
+    btn.textContent = 'Scan';
+    btn.disabled = false;
   }
-
-  iframe.onload = function() {
-    try {
-      const doc = iframe.contentDocument || iframe.contentWindow.document;
-      showResult(doc, null);
-    } catch(e) {
-      showResult(null, 'Cross-origin blocked — page loaded but cannot be read');
-    }
-    cleanup();
-  };
-
-  iframe.onerror = function() {
-    showResult(null, 'Page failed to load');
-    cleanup();
-  };
-
-  document.body.appendChild(iframe);
 }
 
-
-function loadExtensionScanResults(locId) {
-  try {
-    const raw = localStorage.getItem('ghl_scan_' + locId);
-    if (!raw) return;
-    const scan = JSON.parse(raw);
-    if (!scan || !scan.funnels) return;
-    
-    const funnels = scan.funnels;
-    const scannedAt = scan.scannedAt ? new Date(scan.scannedAt).toLocaleString() : '';
-    
-    // Add scan badge to each funnel card
-    Object.entries(funnels).forEach(([fId, fData]) => {
-      const card = document.getElementById('sf-' + fId);
-      if (!card) return;
-      
-      const hdr = card.querySelector('.sf-card-header');
-      if (!hdr) return;
-      
-      // Remove old badge
-      const oldBadge = hdr.querySelector('.ext-scan-badge');
-      if (oldBadge) oldBadge.remove();
-      
-      const badge = document.createElement('span');
-      badge.className = 'ext-scan-badge';
-      badge.style.cssText = 'font-size:10px;font-weight:700;padding:3px 8px;border-radius:50px;flex-shrink:0;';
-      
-      if (fData.hasPixel && fData.hasUTM) {
-        badge.style.background = 'rgba(0,201,122,0.1)';
-        badge.style.color = 'var(--success)';
-        badge.textContent = '✓ Pixel + UTM';
-      } else if (fData.hasPixel) {
-        badge.style.background = 'rgba(255,170,0,0.1)';
-        badge.style.color = 'var(--warning)';
-        badge.textContent = '✓ Pixel · ✗ UTM';
-      } else {
-        badge.style.background = 'rgba(255,59,92,0.1)';
-        badge.style.color = 'var(--error)';
-        badge.textContent = '✗ No Pixel';
-      }
-      
-      // Insert before toggle arrow
-      const toggle = hdr.querySelector('.sf-card-toggle');
-      if (toggle) hdr.insertBefore(badge, toggle);
-      else hdr.appendChild(badge);
-    });
-    
-    // Show scan info bar
-    const withPixel = Object.values(funnels).filter(f => f.hasPixel).length;
-    const withUTM = Object.values(funnels).filter(f => f.hasUTM).length;
-    const total = Object.keys(funnels).length;
-    
-    let bar = document.getElementById('extScanBar');
-    if (!bar) {
-      bar = document.createElement('div');
-      bar.id = 'extScanBar';
-      bar.style.cssText = 'padding:8px 14px;background:rgba(0,201,122,0.05);border:1.5px solid rgba(0,201,122,0.2);border-radius:10px;margin-bottom:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12px;';
-      const sfContent = document.getElementById('sfContent');
-      if (sfContent) sfContent.parentNode.insertBefore(bar, sfContent);
-    }
-    bar.innerHTML = `
-      <span style="font-weight:700;color:var(--text);">Extension Scan</span>
-      <span style="color:var(--text3);font-size:11px;">${scannedAt}</span>
-      <span style="background:rgba(0,201,122,0.1);color:var(--success);font-size:11px;font-weight:700;padding:2px 8px;border-radius:50px;">${withPixel}/${total} with pixel</span>
-      <span style="background:rgba(24,119,242,0.1);color:#1877F2;font-size:11px;font-weight:700;padding:2px 8px;border-radius:50px;">${withUTM}/${total} with UTM</span>
-    `;
-  } catch(e) { /* no scan data */ }
-}
 
 function copyTrackingScript(btn) {
   const script = '<script>\n' + TRACKING_SCRIPT + '\n<\/script>';
@@ -2763,7 +2773,7 @@ async function loadSF(locId, tabEl) {
           <div class="sf-card-name">${esc(f.name||f.title||'Unnamed')}</div>
           <div class="sf-card-count">${steps.length} step${steps.length!==1?'s':''}</div>
           <button class="copy-btn" style="flex-shrink:0;border-color:var(--accent);color:var(--accent);" onclick="event.stopPropagation();openFunnelSettings('${locId}','${fId}',this)">&#9881; Settings</button>
-          <button class="copy-btn" style="flex-shrink:0;" onclick="event.stopPropagation();scanFunnelTracking('${locId}','${fId}',this)">Scan</button>
+          <button class="copy-btn" style="flex-shrink:0;" onclick="event.stopPropagation();scanAllPages('${locId}','${fId}',this)">Scan All</button>
           <button class="copy-btn" style="flex-shrink:0;" onclick="event.stopPropagation();copyTrackingScript(this)">Copy Script</button>
           <div class="sf-card-toggle">&#9660;</div>
         </div>
