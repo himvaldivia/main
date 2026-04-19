@@ -1129,35 +1129,59 @@ async function scanAllPages(locId, funnelId, btn) {
       const slug = (step.slug || step.path || '').replace(/^\//, '');
       const fullUrl = domain && slug ? 'https://' + domain.replace(/^https?:\/\//, '') + '/' + slug : '';
 
-      let hasPixel = false, hasUTM = false, pixelId = '', status = 'no_url', errorMsg = '', hasFooterScript = false, headSnippet = '';
+      let hasPixel = false, hasUTM = false, pixelId = '', status = 'no_url', errorMsg = '', hasFooterScript = false, headSnippet = '', foundAcuityField = '';
 
       if (fullUrl) {
         scanEl.innerHTML = '<div style="padding:10px 16px;font-size:12px;"><span class="spinner"></span> Scanning page ' + (si+1) + '/' + steps.length + ': ' + esc(stepName) + '</div>';
-        try {
-          const resp = await fetch(fullUrl, { cache: 'no-store', credentials: 'omit', mode: 'cors' });
-          if (resp.ok) {
+        // Try direct fetch first, then proxies
+        const urlsToTry = [
+          fullUrl,
+          'https://corsproxy.io/?' + encodeURIComponent(fullUrl),
+          'https://api.allorigins.win/raw?url=' + encodeURIComponent(fullUrl),
+        ];
+        for (const tryUrl of urlsToTry) {
+          try {
+            const resp = await fetch(tryUrl, { cache: 'no-store' });
+            if (!resp.ok) { status = 'error'; errorMsg = 'HTTP ' + resp.status; continue; }
             const html = await resp.text();
+            if (!html || html.length < 200) continue;
             hasPixel = html.includes('fbq(') || html.includes('fbevents.js') || html.includes('Meta Pixel');
             hasUTM = html.includes('user_ip_address') || html.includes('fbclid');
-            hasFooterScript = html.includes('MARKETING DATA TRACKER') || html.includes('ACUITY_FIELD_ID') || html.includes('acuityscheduling.com');
+            // FB Pixel
+            hasPixel = html.includes('fbq(') || html.includes('fbevents.js') || html.includes('Meta Pixel');
             const pm = html.match(/fbq\('init',\s*['"]?(\d+)['"]?\)/);
             pixelId = pm ? pm[1] : '';
-            // Extract head snippet
+
+            // UTM Script
+            hasUTM = html.includes('user_ip_address') || html.includes('fbclid');
+
+            // Footer/Body: Marketing Data Tracker + Acuity Field
+            hasFooterScript = html.includes('MARKETING DATA TRACKER') || html.includes('acuityscheduling.com');
+            const acuityMatch = html.match(/ACUITY_FIELD_ID\s*=\s*['"]([^'"]+)['"]/);
+            foundAcuityField = acuityMatch ? acuityMatch[1] : '';
+
+            // Head snippet (scripts only)
             const hm = html.match(/<head[^>]*>([\s\S]*?)<\/head>/i);
-            headSnippet = hm ? hm[1].replace(/<style[\s\S]*?<\/style>/gi,'').replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim().slice(0,400) : '';
+            const headRaw = hm ? hm[1] : '';
+            // Extract script tags content
+            const scriptTags = [];
+            let sm; const scriptRe = /<script[^>]*>([\s\S]*?)<\/script>/gi;
+            while ((sm = scriptRe.exec(headRaw)) !== null) {
+              const sc = sm[1].trim();
+              if (sc.length > 10) scriptTags.push(sc.slice(0,150));
+            }
+            headSnippet = scriptTags.join('\n---\n').slice(0,500);
             status = 'ok';
-          } else {
-            status = 'error';
-            errorMsg = 'HTTP ' + resp.status;
+            break;
+          } catch(e) {
+            status = 'cors';
+            errorMsg = e.message;
           }
-        } catch(e) {
-          status = 'cors';
-          errorMsg = e.message;
         }
         await sleep(400);
       }
 
-      results.push({ stepName, fullUrl, hasPixel, hasUTM, pixelId, status, errorMsg, hasFooterScript, headSnippet });
+      results.push({ stepName, fullUrl, hasPixel, hasUTM, pixelId, status, errorMsg, hasFooterScript, headSnippet, foundAcuityField });
     }
 
     // Build results
@@ -1179,6 +1203,7 @@ async function scanAllPages(locId, funnelId, btn) {
       ${blocked > 0 ? '<span style="background:var(--warning);color:#fff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:50px;">'+blocked+' blocked</span>' : ''}
     </div>`;
 
+    const expectedAcuityField = getAcuityField(locId);
     let si = 0;
     results.forEach(r => {
       const wrongPixel = r.pixelId && expectedPixel && r.pixelId !== expectedPixel.pixel;
@@ -1201,12 +1226,25 @@ async function scanAllPages(locId, funnelId, btn) {
                   ? '<span style="background:rgba(0,201,122,0.1);color:var(--success);padding:1px 7px;border-radius:50px;font-size:10px;">✓ UTM Script</span>'
                   : '<span style="background:rgba(255,59,92,0.1);color:var(--error);padding:1px 7px;border-radius:50px;font-size:10px;">No UTM Script</span>'}
                 ${r.hasFooterScript
-                  ? '<span style="background:rgba(0,201,122,0.1);color:var(--success);padding:1px 7px;border-radius:50px;font-size:10px;">✓ Footer Script</span>'
-                  : '<span style="background:rgba(255,59,92,0.1);color:var(--error);padding:1px 7px;border-radius:50px;font-size:10px;">No Footer Script</span>'}
+                  ? `<span style="background:rgba(0,201,122,0.1);color:var(--success);padding:1px 7px;border-radius:50px;font-size:10px;">✓ Footer Script</span>
+                     ${r.foundAcuityField
+                       ? '<span style="background:rgba(24,119,242,0.1);color:#1877F2;padding:1px 7px;border-radius:50px;font-size:10px;">Acuity: '+esc(r.foundAcuityField)+'</span>'
+                       : ''}
+                     ${r.foundAcuityField && expectedAcuityField && r.foundAcuityField === expectedAcuityField
+                       ? '<span style="background:rgba(0,201,122,0.1);color:var(--success);padding:1px 7px;border-radius:50px;font-size:10px;">✓ Acuity Match</span>'
+                       : r.foundAcuityField && expectedAcuityField
+                         ? '<span style="background:rgba(255,170,0,0.1);color:var(--warning);padding:1px 7px;border-radius:50px;font-size:10px;">⚠ Acuity mismatch! Expected '+esc(expectedAcuityField)+'</span>'
+                         : ''}`
+                  : '<span style="background:rgba(255,59,92,0.1);color:var(--error);padding:1px 7px;border-radius:50px;font-size:10px;">✗ No Footer Script</span>'}
                 ${wrongPixel ? '<span style="background:rgba(255,170,0,0.1);color:var(--warning);padding:1px 7px;border-radius:50px;font-size:10px;">⚠ Wrong pixel!</span>' : ''}
               </div>
               <button onclick="toggleScanDetail('${rowId}')" style="background:none;border:1px solid var(--border2);color:var(--text3);font-size:10px;padding:1px 7px;border-radius:50px;cursor:pointer;font-family:var(--font);">View code details</button>
-              <div id="${rowId}" style="display:none;margin-top:6px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px;font-size:10px;font-family:monospace;white-space:pre-wrap;max-height:120px;overflow-y:auto;color:var(--text2);">${esc(r.headSnippet||'')}</div>`
+              <div id="${rowId}" style="display:none;margin-top:6px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px;font-size:11px;line-height:1.6;color:var(--text2);">
+                <div style="font-weight:700;margin-bottom:4px;font-size:10px;text-transform:uppercase;color:var(--text3);">Head Scripts Found:</div>
+                <pre style="font-family:monospace;font-size:10px;white-space:pre-wrap;max-height:100px;overflow-y:auto;margin:0;">${esc(r.headSnippet||'(empty or could not read)')}</pre>
+                ${r.foundAcuityField ? '<div style="margin-top:6px;font-size:10px;"><strong>Acuity Field in page:</strong> '+esc(r.foundAcuityField)+'</div>' : ''}
+                ${r.foundAcuityField && expectedAcuityField ? '<div style="font-size:10px;color:'+(r.foundAcuityField===expectedAcuityField?'var(--success)':'var(--warning)')+'"><strong>Expected for this spa:</strong> '+esc(expectedAcuityField)+(r.foundAcuityField===expectedAcuityField?' ✓ Match':' ⚠ Mismatch')+'</div>' : ''}
+              </div>`
             : `<span style="color:var(--text3);font-size:10px;">${r.status==='cors'?'CORS blocked':r.errorMsg||'No URL'}</span>`}
           </div>
           ${r.fullUrl ? '<a href="'+esc(r.fullUrl)+'" target="_blank" style="font-size:10px;color:var(--accent);flex-shrink:0;">↗</a>' : ''}
@@ -2188,7 +2226,12 @@ window.addEventListener('DOMContentLoaded', function() {
     setTimeout(() => conectar(), 400);
   }
 });
-function saveToken(id, token) { const t = loadTokens(); t[id] = token; localStorage.setItem(STORAGE_KEY, JSON.stringify(t)); }
+function saveToken(id, token) {
+  const t = loadTokens();
+  t[id] = token;
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(t));
+  sharedSet(STORAGE_KEY, t);
+}
 function getToken(id) { return loadTokens()[id] || ''; }
 
 function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
@@ -2914,12 +2957,10 @@ async function loadSF(locId, tabEl) {
         <div class="sf-card-header" onclick="toggleSFCard('sf-${fId}')">
           <div class="sf-card-name">${esc(f.name||f.title||'Unnamed')}</div>
           <div class="sf-card-count">${steps.length} step${steps.length!==1?'s':''}</div>
-          <button class="copy-btn" style="flex-shrink:0;border-color:var(--accent);color:var(--accent);" onclick="event.stopPropagation();openFunnelSettings('${locId}','${fId}',this)">&#9881; Settings</button>
           <button class="copy-btn" style="flex-shrink:0;" onclick="event.stopPropagation();scanAllPages('${locId}','${fId}',this)">Scan All</button>
           <button class="copy-btn" style="flex-shrink:0;" onclick="event.stopPropagation();copyTrackingScript(this)">Copy Script</button>
           <div class="sf-card-toggle">&#9660;</div>
         </div>
-        <div id="fsettings-${fId}" style="display:none;border-bottom:1px solid var(--border);"></div>
         <div id="scan-status-${fId}" style="display:none;border-bottom:1px solid var(--border);"></div>
         <div id="inject-status-${fId}" style="display:none;padding:6px 14px;font-size:11px;background:rgba(0,201,122,0.07);border-bottom:1px solid var(--border);"></div>
         <div class="sf-pages">`;
@@ -3358,11 +3399,30 @@ function showErr(id, msg) { const e=document.getElementById(id); if(e){e.textCon
 function hideErr(id) { const e=document.getElementById(id); if(e) e.style.display='none'; }
 
 // ── AUTO-CONNECT ──────────────────────────────────────────────
-window.addEventListener('DOMContentLoaded', function() {
+window.addEventListener('DOMContentLoaded', async function() {
   const t = localStorage.getItem('ghl_agency_token');
   const c = localStorage.getItem('ghl_company_id');
   if (t) document.getElementById('agencyToken').value = t;
   if (c) document.getElementById('companyId').value = c;
+
+  // Try to load shared tokens/domains from artifact storage
+  try {
+    if (window.storage) {
+      const sharedTokens = await window.storage.get(STORAGE_KEY, true);
+      if (sharedTokens) {
+        const existing = loadTokens();
+        const merged = { ...JSON.parse(sharedTokens.value), ...existing };
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+      }
+      const sharedDomains = await window.storage.get(DOMAIN_KEY, true);
+      if (sharedDomains) {
+        const existing = loadDomains();
+        const merged = { ...JSON.parse(sharedDomains.value), ...existing };
+        localStorage.setItem(DOMAIN_KEY, JSON.stringify(merged));
+      }
+    }
+  } catch(e) {}
+
   if (t && c) setTimeout(() => conectar(), 400);
 });
 
