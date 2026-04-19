@@ -1470,6 +1470,75 @@ function scanPageInFrame(url, btn) {
   document.body.appendChild(iframe);
 }
 
+
+function loadExtensionScanResults(locId) {
+  try {
+    const raw = localStorage.getItem('ghl_scan_' + locId);
+    if (!raw) return;
+    const scan = JSON.parse(raw);
+    if (!scan || !scan.funnels) return;
+    
+    const funnels = scan.funnels;
+    const scannedAt = scan.scannedAt ? new Date(scan.scannedAt).toLocaleString() : '';
+    
+    // Add scan badge to each funnel card
+    Object.entries(funnels).forEach(([fId, fData]) => {
+      const card = document.getElementById('sf-' + fId);
+      if (!card) return;
+      
+      const hdr = card.querySelector('.sf-card-header');
+      if (!hdr) return;
+      
+      // Remove old badge
+      const oldBadge = hdr.querySelector('.ext-scan-badge');
+      if (oldBadge) oldBadge.remove();
+      
+      const badge = document.createElement('span');
+      badge.className = 'ext-scan-badge';
+      badge.style.cssText = 'font-size:10px;font-weight:700;padding:3px 8px;border-radius:50px;flex-shrink:0;';
+      
+      if (fData.hasPixel && fData.hasUTM) {
+        badge.style.background = 'rgba(0,201,122,0.1)';
+        badge.style.color = 'var(--success)';
+        badge.textContent = '✓ Pixel + UTM';
+      } else if (fData.hasPixel) {
+        badge.style.background = 'rgba(255,170,0,0.1)';
+        badge.style.color = 'var(--warning)';
+        badge.textContent = '✓ Pixel · ✗ UTM';
+      } else {
+        badge.style.background = 'rgba(255,59,92,0.1)';
+        badge.style.color = 'var(--error)';
+        badge.textContent = '✗ No Pixel';
+      }
+      
+      // Insert before toggle arrow
+      const toggle = hdr.querySelector('.sf-card-toggle');
+      if (toggle) hdr.insertBefore(badge, toggle);
+      else hdr.appendChild(badge);
+    });
+    
+    // Show scan info bar
+    const withPixel = Object.values(funnels).filter(f => f.hasPixel).length;
+    const withUTM = Object.values(funnels).filter(f => f.hasUTM).length;
+    const total = Object.keys(funnels).length;
+    
+    let bar = document.getElementById('extScanBar');
+    if (!bar) {
+      bar = document.createElement('div');
+      bar.id = 'extScanBar';
+      bar.style.cssText = 'padding:8px 14px;background:rgba(0,201,122,0.05);border:1.5px solid rgba(0,201,122,0.2);border-radius:10px;margin-bottom:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12px;';
+      const sfContent = document.getElementById('sfContent');
+      if (sfContent) sfContent.parentNode.insertBefore(bar, sfContent);
+    }
+    bar.innerHTML = `
+      <span style="font-weight:700;color:var(--text);">Extension Scan</span>
+      <span style="color:var(--text3);font-size:11px;">${scannedAt}</span>
+      <span style="background:rgba(0,201,122,0.1);color:var(--success);font-size:11px;font-weight:700;padding:2px 8px;border-radius:50px;">${withPixel}/${total} with pixel</span>
+      <span style="background:rgba(24,119,242,0.1);color:#1877F2;font-size:11px;font-weight:700;padding:2px 8px;border-radius:50px;">${withUTM}/${total} with UTM</span>
+    `;
+  } catch(e) { /* no scan data */ }
+}
+
 function copyTrackingScript(btn) {
   const script = '<script>\n' + TRACKING_SCRIPT + '\n<\/script>';
   navigator.clipboard.writeText(script).then(() => {
@@ -2765,6 +2834,8 @@ async function loadSF(locId, tabEl) {
 
   content.innerHTML = html;
   enableInjectBtn();
+  // Load scan results from extension if available
+  loadExtensionScanResults(locId);
 
   // Add inject pixel button
   const pixelBar = document.getElementById('sfPixelBar');
