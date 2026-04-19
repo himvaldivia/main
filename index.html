@@ -1072,7 +1072,7 @@ async function scanAllPages(locId, funnelId, btn) {
   btn.textContent = '...';
   btn.disabled = true;
   scanEl.style.display = 'block';
-  scanEl.innerHTML = '<div style="padding:10px 16px;font-size:12px;"><span class="spinner"></span> Scanning pages...</div>';
+  scanEl.innerHTML = '<div style="padding:10px 16px;font-size:12px;"><span class="spinner"></span> Loading funnel...</div>';
 
   try {
     const tok = getToken(locId);
@@ -1086,70 +1086,85 @@ async function scanAllPages(locId, funnelId, btn) {
     const expectedPixel = getPixelForDomain(domain);
     const results = [];
 
-    for (const step of steps) {
-      const stepName = step.name || step.title || 'Page';
+    scanEl.innerHTML = '<div style="padding:10px 16px;font-size:12px;"><span class="spinner"></span> Scanning ' + steps.length + ' pages...</div>';
+
+    for (let si = 0; si < steps.length; si++) {
+      const step = steps[si];
+      const stepName = step.name || step.title || 'Page ' + (si+1);
       const slug = (step.slug || step.path || '').replace(/^\//, '');
       const fullUrl = domain && slug ? 'https://' + domain.replace(/^https?:\/\//, '') + '/' + slug : '';
 
-      let hasPixel = false, hasUTM = false, pixelId = '', status = 'no_url';
+      let hasPixel = false, hasUTM = false, pixelId = '', status = 'no_url', errorMsg = '';
 
       if (fullUrl) {
+        scanEl.innerHTML = '<div style="padding:10px 16px;font-size:12px;"><span class="spinner"></span> Scanning page ' + (si+1) + '/' + steps.length + ': ' + esc(stepName) + '</div>';
         try {
-          const resp = await fetch(fullUrl, { cache: 'no-store', credentials: 'omit' });
+          const resp = await fetch(fullUrl, { cache: 'no-store', credentials: 'omit', mode: 'cors' });
           if (resp.ok) {
             const html = await resp.text();
-            hasPixel = html.includes('fbq(') || html.includes('fbevents.js');
+            hasPixel = html.includes('fbq(') || html.includes('fbevents.js') || html.includes('Meta Pixel');
             hasUTM = html.includes('user_ip_address') || html.includes('fbclid');
             const pm = html.match(/fbq\('init',\s*['"]?(\d+)['"]?\)/);
             pixelId = pm ? pm[1] : '';
             status = 'ok';
           } else {
-            status = 'error_' + resp.status;
+            status = 'error';
+            errorMsg = 'HTTP ' + resp.status;
           }
         } catch(e) {
           status = 'cors';
+          errorMsg = e.message;
         }
-        await sleep(300);
+        await sleep(400);
       }
 
-      results.push({ stepName, fullUrl, hasPixel, hasUTM, pixelId, status });
+      results.push({ stepName, fullUrl, hasPixel, hasUTM, pixelId, status, errorMsg });
     }
 
+    // Build results
     const withPixel = results.filter(r => r.hasPixel).length;
     const withUTM = results.filter(r => r.hasUTM).length;
     const scanned = results.filter(r => r.status === 'ok').length;
-    const corsBlocked = results.filter(r => r.status === 'cors').length;
+    const blocked = results.filter(r => r.status === 'cors' || r.status === 'error').length;
+
+    const knownPixels = {
+      '1180664739949233': 'First Touch Beauty',
+      '540031443835405': 'No Needle Needed',
+      '819221296693583': 'Adv Beauty Treatments'
+    };
 
     let html = `<div style="padding:8px 16px;background:var(--surface2);border-bottom:1px solid var(--border);display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-      <span style="font-size:12px;font-weight:700;">Page Scan</span>
-      ${scanned > 0 ? '<span style="background:var(--success);color:#fff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:50px;">✓ '+withPixel+'/'+scanned+' pixel</span>' : ''}
+      <span style="font-size:12px;font-weight:700;">Results</span>
+      ${scanned > 0 ? '<span style="background:var(--success);color:#fff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:50px;">'+withPixel+'/'+scanned+' pixel</span>' : ''}
       ${scanned > 0 ? '<span style="background:#1877F2;color:#fff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:50px;">'+withUTM+'/'+scanned+' UTM</span>' : ''}
-      ${corsBlocked > 0 ? '<span style="background:var(--warning);color:#fff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:50px;">'+corsBlocked+' blocked</span>' : ''}
+      ${blocked > 0 ? '<span style="background:var(--warning);color:#fff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:50px;">'+blocked+' blocked</span>' : ''}
     </div>`;
 
     results.forEach(r => {
-      if (r.status === 'cors' || r.status === 'no_url') {
-        html += `<div style="display:flex;align-items:center;gap:8px;padding:6px 16px;border-bottom:1px solid var(--border);font-size:11px;">
-          <span style="color:var(--text3);">?</span>
-          <span style="flex:1;">${esc(r.stepName)}</span>
-          <span style="color:var(--text3);font-size:10px;">${r.status === 'cors' ? 'CORS blocked' : 'No URL'}</span>
-          ${r.fullUrl ? '<a href="'+esc(r.fullUrl)+'" target="_blank" style="font-size:10px;color:var(--accent);">Open ↗</a>' : ''}
-        </div>`;
-        return;
-      }
-
       const wrongPixel = r.pixelId && expectedPixel && r.pixelId !== expectedPixel.pixel;
-      html += `<div style="display:flex;align-items:center;gap:8px;padding:6px 16px;border-bottom:1px solid var(--border);font-size:11px;">
-        <span style="color:${r.hasPixel?'var(--success)':'var(--error)'};font-weight:700;">${r.hasPixel?'✓':'✗'}</span>
-        <div style="flex:1;min-width:0;">
-          <div style="font-weight:600;">${esc(r.stepName)}</div>
-          <div style="display:flex;gap:6px;margin-top:2px;flex-wrap:wrap;">
-            ${r.pixelId ? '<span style="color:#1877F2;font-size:10px;">Pixel: '+r.pixelId+'</span>' : '<span style="color:var(--error);font-size:10px;">No pixel</span>'}
-            <span style="color:${r.hasUTM?'var(--success)':'var(--error)'};font-size:10px;">${r.hasUTM?'✓ UTM':'✗ UTM'}</span>
-            ${wrongPixel ? '<span style="color:var(--warning);font-size:10px;">⚠ Wrong pixel!</span>' : ''}
+      const brand = knownPixels[r.pixelId] || '';
+
+      html += `<div style="padding:7px 16px;border-bottom:1px solid var(--border);font-size:11px;">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span style="color:${r.status==='ok'?(r.hasPixel?'var(--success)':'var(--error)'):'var(--text3)'};font-weight:700;font-size:13px;flex-shrink:0;">
+            ${r.status==='ok' ? (r.hasPixel?'✓':'✗') : '?'}
+          </span>
+          <div style="flex:1;min-width:0;">
+            <div style="font-weight:600;margin-bottom:3px;">${esc(r.stepName)}</div>
+            ${r.status === 'ok' ? `
+              <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                ${r.hasPixel
+                  ? '<span style="background:rgba(24,119,242,0.1);color:#1877F2;padding:1px 7px;border-radius:50px;font-size:10px;">Pixel: '+r.pixelId+(brand?' ('+brand+')':'')+'</span>'
+                  : '<span style="background:rgba(255,59,92,0.1);color:var(--error);padding:1px 7px;border-radius:50px;font-size:10px;">No FB Pixel</span>'}
+                ${r.hasUTM
+                  ? '<span style="background:rgba(0,201,122,0.1);color:var(--success);padding:1px 7px;border-radius:50px;font-size:10px;">✓ UTM Script</span>'
+                  : '<span style="background:rgba(255,59,92,0.1);color:var(--error);padding:1px 7px;border-radius:50px;font-size:10px;">No UTM Script</span>'}
+                ${wrongPixel ? '<span style="background:rgba(255,170,0,0.1);color:var(--warning);padding:1px 7px;border-radius:50px;font-size:10px;">⚠ Wrong pixel! Expected '+expectedPixel.pixel+'</span>' : ''}
+              </div>` 
+            : `<span style="color:var(--text3);font-size:10px;">${r.status==='cors'?'CORS blocked':r.errorMsg||'No URL'}</span>`}
           </div>
+          ${r.fullUrl ? '<a href="'+esc(r.fullUrl)+'" target="_blank" style="font-size:10px;color:var(--accent);flex-shrink:0;">↗</a>' : ''}
         </div>
-        ${r.fullUrl ? '<a href="'+esc(r.fullUrl)+'" target="_blank" style="font-size:10px;color:var(--accent);">↗</a>' : ''}
       </div>`;
     });
 
@@ -1161,6 +1176,7 @@ async function scanAllPages(locId, funnelId, btn) {
     btn.disabled = false;
   }
 }
+
 
 async function scanFunnelTracking(locId, funnelId, btn) {
   const tok = getToken(locId);
@@ -2739,13 +2755,12 @@ async function loadSF(locId, tabEl) {
         } catch(e2) { /* not found */ }
       }
     }
-    // Map domainId to CSV domain as fallback
-    if (f0.domainId && domainMap['_csv'] && !domainMap[f0.domainId]) {
-      domainMap[f0.domainId] = domainMap['_csv'];
-    }
-    if (f0.domainId && domainMap['_saved'] && !domainMap[f0.domainId]) {
-      domainMap[f0.domainId] = domainMap['_saved'];
-    }
+    // Map domainId to CSV/saved domain for ALL funnels
+    funnels.forEach(f => {
+      if (f.domainId && !domainMap[f.domainId]) {
+        domainMap[f.domainId] = domainMap['_saved'] || domainMap['_csv'] || '';
+      }
+    });
   } catch(e) { console.warn('Funnels error:', e.message); }
 
   try {
