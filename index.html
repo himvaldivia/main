@@ -1,0 +1,3344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GHL Manager</title>
+<link href="https://fonts.googleapis.com/css2?family=Urbanist:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#f5f8ff;--surface:#ffffff;--surface2:#eef2fb;
+  --border:#dde3f4;--border2:#c8d1eb;
+  --accent:#ff1d8d;--accent2:#ff57aa;
+  --text:#1a1d2e;--text2:#6b7299;--text3:#a0a8c8;
+  --success:#00c97a;--error:#ff3b5c;--warning:#ffaa00;
+  --font:'Urbanist',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--text);font-family:var(--font);min-height:100vh;display:flex;flex-direction:column;}
+
+/* TOPBAR */
+.topbar{
+  display:flex;align-items:center;gap:16px;
+  padding:16px 28px 19px;
+  background:var(--bg);
+  position:relative;z-index:10;
+}
+.topbar::after{
+  content:'';position:absolute;bottom:0;left:28px;right:28px;
+  height:3px;background:var(--accent);border-radius:99px;
+}
+.logo{font-weight:800;font-size:20px;color:var(--accent);letter-spacing:-0.02em;}
+.topbar-title{font-size:14px;font-weight:600;color:var(--text);}
+.topbar-sub{font-size:11px;color:var(--text2);}
+.conn-status{margin-left:auto;display:flex;align-items:center;gap:8px;}
+.status-dot{width:8px;height:8px;border-radius:50%;background:var(--border2);}
+.status-dot.on{background:var(--success);}
+.status-lbl{font-size:12px;font-weight:600;color:var(--text2);}
+
+/* LAYOUT */
+.app{display:flex;flex:1;min-height:0;position:relative;z-index:1;}
+
+/* SIDEBAR */
+.sidebar{
+  width:116px;flex-shrink:0;
+  background:var(--bg);
+  display:flex;flex-direction:column;
+  align-items:center;
+  padding:20px 8px;
+  gap:6px;
+}
+.nav-btn{
+  width:100px;padding:11px 8px;
+  border-radius:12px;
+  border:1.5px solid var(--border2);
+  background:transparent;
+  color:var(--text2);
+  font-family:var(--font);font-size:12px;font-weight:600;
+  text-align:center;cursor:pointer;
+  transition:all 0.15s;
+}
+.nav-btn:hover{border-color:var(--accent);color:var(--accent);}
+.nav-btn.active{background:var(--accent);color:#fff;border-color:var(--accent);box-shadow:0 4px 14px rgba(255,29,141,0.25);}
+
+/* MAIN */
+.main{flex:1;overflow-y:auto;padding:24px 28px;}
+.main::-webkit-scrollbar{width:4px;}
+.main::-webkit-scrollbar-thumb{background:var(--border2);border-radius:99px;}
+
+.panel{display:none;}
+.panel.active{display:block;}
+
+/* CARDS */
+.card{background:var(--surface);border:1.5px solid var(--border);border-radius:16px;padding:22px;box-shadow:0 2px 12px rgba(100,120,200,0.06);}
+.card+.card{margin-top:14px;}
+
+/* PAGE HEADER */
+.page-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px;}
+.page-hdr h2{font-size:18px;font-weight:700;}
+.page-hdr p{font-size:12px;color:var(--text2);margin-top:2px;}
+
+/* FORM */
+label{display:block;font-size:11px;font-weight:600;color:var(--text2);letter-spacing:0.06em;text-transform:uppercase;margin-bottom:5px;}
+input[type=text],input[type=password]{
+  width:100%;background:var(--surface2);border:1.5px solid var(--border);
+  color:var(--text);font-family:var(--font);font-size:13px;
+  padding:9px 13px;outline:none;border-radius:10px;transition:all 0.2s;
+}
+input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(255,29,141,0.08);}
+input::placeholder{color:var(--text3);}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+@media(max-width:560px){.row2{grid-template-columns:1fr;}}
+.field{display:flex;flex-direction:column;gap:5px;}
+.fe{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;margin-top:14px;}
+
+/* BUTTONS */
+.btn{background:var(--accent);color:#fff;border:none;font-family:var(--font);font-size:12px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;padding:9px 20px;cursor:pointer;transition:all 0.15s;border-radius:50px;white-space:nowrap;box-shadow:0 2px 10px rgba(255,29,141,0.25);}
+.btn:hover{background:var(--accent2);transform:translateY(-1px);}
+.btn:disabled{background:var(--border2);color:var(--text3);cursor:not-allowed;box-shadow:none;transform:none;}
+.btn-ghost{background:transparent;border:1.5px solid var(--border2);color:var(--text2);box-shadow:none;}
+.btn-ghost:hover{border-color:var(--accent);color:var(--accent);background:rgba(255,29,141,0.04);transform:none;}
+.btn-success{background:var(--success);color:#fff;box-shadow:0 2px 10px rgba(0,201,122,0.25);}
+.btn-success:hover{background:#00e088;}
+.btn-sm{padding:5px 12px;font-size:10px;}
+.btn-warn{background:transparent;border:1.5px solid var(--warning);color:var(--warning);box-shadow:none;}
+
+/* NOTICE */
+.notice{padding:10px 14px;background:rgba(255,29,141,0.05);border:1.5px solid rgba(255,29,141,0.18);margin-bottom:14px;border-radius:10px;font-size:12px;color:var(--text2);line-height:1.5;}
+.notice code{font-family:monospace;background:var(--surface2);padding:1px 5px;font-size:11px;color:var(--accent);border-radius:4px;}
+.err-msg{margin-top:8px;font-size:12px;font-weight:500;color:var(--error);display:none;}
+.warn-msg{margin-top:8px;font-size:12px;font-weight:500;color:var(--warning);display:none;}
+
+/* TOOLBAR */
+.toolbar{display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap;}
+.search-box{flex:1;min-width:140px;background:var(--surface2);border:1.5px solid var(--border);color:var(--text);font-family:var(--font);font-size:12px;padding:7px 13px;outline:none;border-radius:50px;}
+.search-box:focus{border-color:var(--accent);}
+.count-lbl{font-size:12px;font-weight:600;color:var(--text2);}
+
+/* LOCATION LIST */
+.loc-list{border:1.5px solid var(--border);border-radius:12px;overflow-y:auto;background:var(--surface);max-height:calc(100vh - 320px);}
+.loc-list::-webkit-scrollbar{width:4px;}
+.loc-list::-webkit-scrollbar-thumb{background:var(--border2);border-radius:99px;}
+.loc-item{border-bottom:1px solid var(--border);}
+.loc-item:last-child{border-bottom:none;}
+.loc-main{display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;transition:background 0.1s;user-select:none;}
+.loc-main:hover{background:var(--surface2);}
+.loc-item.sel .loc-main{background:rgba(255,29,141,0.07);}
+.loc-item.sel{border-left:3px solid var(--accent);}
+.chk{width:16px;height:16px;border:1.5px solid var(--border2);display:flex;align-items:center;justify-content:center;flex-shrink:0;border-radius:4px;transition:all 0.15s;}
+.loc-item.sel .chk{background:var(--accent);border-color:var(--accent);}
+.chk-mark{display:none;color:#fff;font-size:10px;font-weight:700;}
+.loc-item.sel .chk-mark{display:block;}
+.loc-info{flex:1;min-width:0;}
+.loc-name{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.loc-id-txt{font-family:monospace;font-size:10px;color:var(--text3);margin-top:1px;}
+.tok-badge{font-size:10px;font-weight:700;padding:3px 10px;border:1.5px solid;flex-shrink:0;cursor:default;border-radius:50px;}
+.tok-badge.ok{color:var(--success);border-color:var(--success);background:rgba(0,201,122,0.07);}
+.tok-badge.no{color:var(--text3);border-color:var(--border2);}
+
+/* TOKEN EXPAND */
+.tok-expand{display:none;padding:8px 14px 12px 44px;background:var(--surface2);border-top:1px solid var(--border);}
+.loc-item.show-token .tok-expand{display:block;}
+.tok-row{display:flex;gap:8px;align-items:center;margin-bottom:6px;}
+.tok-input{flex:1;background:var(--surface);border:1.5px solid var(--border);color:var(--text);font-family:monospace;font-size:11px;padding:6px 11px;outline:none;border-radius:8px;}
+.tok-input:focus{border-color:var(--accent);}
+.tok-input::placeholder{color:var(--text3);}
+
+/* INLINE CV */
+.inline-cv-panel{display:none;border-top:1.5px solid var(--border);background:var(--surface2);padding:14px;}
+.inline-cv-row{display:flex;align-items:center;gap:10px;padding:7px 10px;background:var(--surface);border:1.5px solid var(--border);border-radius:10px;margin-bottom:6px;}
+.cv-key-lbl{font-size:11px;font-weight:700;color:var(--accent);width:180px;flex-shrink:0;}
+.cv-cur{font-size:11px;color:var(--text3);font-family:monospace;flex:1;}
+.cv-inp-inline{flex:1;background:var(--surface2);border:1.5px solid var(--border);color:var(--text);font-family:var(--font);font-size:12px;padding:4px 8px;outline:none;border-radius:7px;min-width:100px;}
+.cv-inp-inline:focus{border-color:var(--accent);}
+
+/* CV FOLDERS */
+.cv-wrap{background:var(--bg);overflow-y:auto;max-height:calc(100vh - 280px);}
+.cv-wrap::-webkit-scrollbar{width:4px;}
+.cv-wrap::-webkit-scrollbar-thumb{background:var(--border2);border-radius:99px;}
+
+.cv-folder{margin-bottom:8px;border:1.5px solid var(--border);border-radius:12px;overflow:hidden;background:var(--surface);}
+.cv-folder-hdr{display:flex;align-items:center;gap:10px;padding:12px 16px;cursor:pointer;user-select:none;background:var(--surface2);transition:background 0.15s;}
+.cv-folder-hdr:hover{background:var(--border);}
+.cv-folder-arrow{color:var(--accent);font-size:11px;transition:transform 0.2s;display:inline-block;flex-shrink:0;}
+.cv-folder-name{font-size:13px;font-weight:700;flex:1;}
+.cv-folder-count{font-size:11px;color:var(--text2);background:var(--surface);border:1px solid var(--border);border-radius:50px;padding:2px 8px;}
+
+.cv-row{display:flex;border-bottom:1px solid var(--border);}
+.cv-row:last-child{border-bottom:none;}
+.cv-row-header{background:var(--surface2);}
+.cv-row-header .cv-cell{font-size:10px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:0.05em;padding:8px 12px;}
+.cv-cell{flex:1;padding:10px 12px;min-width:0;border-right:1px solid var(--border);}
+.cv-cell:last-child{border-right:none;}
+.cv-cell-name{flex:0 0 200px;max-width:200px;font-size:12px;font-weight:600;color:var(--text);border-right:2px solid var(--border) !important;display:flex;align-items:flex-start;padding-top:12px;}
+.cv-cur{font-size:11px;color:var(--text3);font-family:monospace;margin-bottom:6px;padding:3px 7px;background:var(--surface2);border-radius:5px;word-break:break-all;line-height:1.4;}
+.cv-cur.empty{font-style:italic;background:none;padding:3px 0;}
+.cv-inp{width:100%;background:var(--bg);border:1.5px solid var(--border);color:var(--text);font-family:var(--font);font-size:12px;padding:7px 10px;outline:none;border-radius:8px;transition:all 0.2s;}
+.cv-inp:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(255,29,141,0.08);background:var(--surface);}
+.cv-inp::placeholder{color:var(--text3);font-size:11px;}
+.cv-inp[value]:not([value=""]){border-color:var(--warning);background:rgba(255,170,0,0.04);}
+/* CV FOLDERS */
+.cv-wrap{background:var(--bg);overflow-y:auto;max-height:calc(100vh - 280px);}
+.cv-wrap::-webkit-scrollbar{width:4px;}
+.cv-wrap::-webkit-scrollbar-thumb{background:var(--border2);border-radius:99px;}
+.cvf{margin-bottom:8px;border:1.5px solid var(--border);border-radius:12px;overflow:hidden;background:var(--surface);}
+.cvf-hdr{display:flex;align-items:center;gap:10px;padding:12px 16px;cursor:pointer;user-select:none;background:var(--surface2);transition:background 0.15s;}
+.cvf-hdr:hover{background:rgba(255,29,141,0.05);}
+.cvf-arrow{color:var(--accent);font-size:11px;transition:transform 0.2s;display:inline-block;flex-shrink:0;width:16px;}
+.cvf-name{font-size:13px;font-weight:700;flex:1;color:var(--text);}
+.cvf-count{font-size:11px;color:var(--text2);background:var(--surface);border:1px solid var(--border);border-radius:50px;padding:2px 9px;}
+.cvf-row{display:flex;border-bottom:1px solid var(--border);}
+.cvf-row:last-child{border-bottom:none;}
+.cvf-row-hdr{background:var(--surface2);}
+.cvf-row-hdr .cvf-cell{font-size:10px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:0.05em;}
+.cvf-cell{flex:1;padding:10px 12px;min-width:180px;border-right:1px solid var(--border);}
+.cvf-cell:last-child{border-right:none;}
+.cvf-cell-label{flex:0 0 210px;max-width:210px;font-size:12px;font-weight:600;color:var(--text);border-right:2px solid var(--border) !important;}
+.cvf-cell-acct{font-size:12px;font-weight:600;color:var(--accent);}
+.cvf-cur{font-size:11px;color:var(--text3);font-family:monospace;margin-bottom:6px;padding:3px 7px;background:var(--surface2);border-radius:5px;word-break:break-all;line-height:1.4;}
+.cvf-cur em{font-style:italic;color:var(--text3);}
+.cvf-inp{width:100%;background:var(--bg);border:1.5px solid var(--border);color:var(--text);font-family:var(--font);font-size:12px;padding:7px 10px;outline:none;border-radius:8px;transition:border-color 0.2s;}
+.cvf-inp:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(255,29,141,0.08);}
+.cvf-inp::placeholder{color:var(--text3);font-size:11px;}
+
+/* WORKFLOW CARDS */
+.wf-card{background:var(--surface);border:1.5px solid var(--border);border-radius:12px;overflow:hidden;}
+.wf-header{display:flex;align-items:center;gap:12px;padding:12px 16px;}
+.wf-info{flex:1;min-width:0;}
+.wf-name{font-size:13px;font-weight:700;color:var(--text);margin-bottom:4px;}
+.wf-meta{display:flex;gap:12px;flex-wrap:wrap;font-size:11px;color:var(--text2);}
+.wf-meta span{display:flex;align-items:center;gap:3px;}
+.wf-status{font-size:10px;font-weight:700;padding:4px 10px;border-radius:50px;border:1.5px solid;flex-shrink:0;text-transform:uppercase;letter-spacing:0.05em;}
+.wf-status.active{color:var(--success);border-color:var(--success);background:rgba(0,201,122,0.08);}
+.wf-status.inactive{color:var(--text3);border-color:var(--border2);}
+
+/* RESULTS */
+.stats-row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px;}
+.stat{background:var(--surface);padding:14px;text-align:center;border-radius:12px;border:1.5px solid var(--border);}
+.stat-val{font-size:24px;font-weight:700;line-height:1;}
+.stat-lbl{font-size:11px;font-weight:600;color:var(--text3);margin-top:4px;text-transform:uppercase;letter-spacing:0.05em;}
+.stat.total .stat-val{color:var(--text);}
+.stat.ok .stat-val{color:var(--success);}
+.stat.err .stat-val{color:var(--error);}
+.progress{height:5px;background:var(--border);overflow:hidden;margin-bottom:14px;border-radius:99px;}
+.progress-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));width:0%;transition:width 0.3s;border-radius:99px;}
+.log{background:var(--surface2);border:1.5px solid var(--border);font-family:monospace;font-size:11px;padding:10px 14px;max-height:200px;overflow-y:auto;line-height:2;border-radius:10px;}
+.log-line{display:flex;gap:10px;}
+.log-line .ts{color:var(--text3);flex-shrink:0;}
+.log-line .msg{color:var(--text2);}
+.log-line.ok .msg{color:var(--success);}
+.log-line.err .msg{color:var(--error);}
+.log-line.info .msg{color:var(--accent);}
+
+/* SF */
+.sf-tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;}
+.sf-tab{padding:7px 16px;border-radius:50px;border:1.5px solid var(--border);background:var(--surface);font-size:12px;font-weight:600;cursor:pointer;transition:all 0.15s;color:var(--text2);}
+.sf-tab:hover{border-color:var(--accent);color:var(--accent);}
+.sf-tab.active{background:var(--accent);color:#fff;border-color:var(--accent);}
+.sf-section-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--text2);margin:16px 0 8px;display:flex;align-items:center;gap:8px;}
+.sf-section-title::after{content:'';flex:1;height:1px;background:var(--border);}
+.sf-card{border:1.5px solid var(--border);border-radius:12px;background:var(--surface);margin-bottom:10px;overflow:hidden;}
+.sf-card-header{display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--surface2);border-bottom:1px solid var(--border);cursor:pointer;}
+.sf-card-header:hover{background:var(--border);}
+.sf-card-name{font-size:13px;font-weight:700;flex:1;}
+.sf-card-count{font-size:11px;color:var(--text2);}
+.sf-pages{display:none;}
+.sf-card.open .sf-pages{display:block;}
+.sf-page{display:flex;align-items:center;gap:10px;padding:8px 14px 8px 28px;border-bottom:1px solid var(--border);font-size:12px;}
+.sf-step:last-child{border-bottom:none;}
+.sf-page-name{flex:1;font-weight:500;}
+.sf-link{font-size:11px;color:var(--accent);word-break:break-all;cursor:pointer;}
+.sf-link:hover{text-decoration:underline;}
+.copy-btn{background:transparent;border:1px solid var(--border2);color:var(--text3);font-size:10px;padding:2px 7px;border-radius:50px;cursor:pointer;flex-shrink:0;font-family:var(--font);transition:all 0.15s;}
+.copy-btn:hover{border-color:var(--accent);color:var(--accent);}
+.copy-btn.copied{border-color:var(--success);color:var(--success);}
+
+@keyframes spin{to{transform:rotate(360deg);}}
+.spinner{display:inline-block;width:12px;height:12px;border:2px solid var(--border2);border-top-color:var(--accent);border-radius:50%;animation:spin 0.6s linear infinite;vertical-align:middle;margin-right:6px;}
+.empty{padding:30px;text-align:center;font-size:12px;color:var(--text3);}
+.sp{height:12px;}
+.wf-card{background:var(--surface);border:1.5px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:8px;}
+.wf-hdr{display:flex;align-items:center;gap:10px;padding:12px 16px;cursor:pointer;transition:background 0.15s;user-select:none;}
+.wf-hdr:hover{background:var(--surface2);}
+.wf-name{font-size:13px;font-weight:700;flex:1;}
+.wf-meta{font-size:11px;color:var(--text2);margin-top:2px;}
+.wf-status{font-size:10px;font-weight:700;padding:4px 10px;border-radius:50px;border:1.5px solid;flex-shrink:0;text-transform:uppercase;}
+.wf-status.active{color:var(--success);border-color:var(--success);background:rgba(0,201,122,0.08);}
+.wf-status.inactive{color:var(--text3);border-color:var(--border2);}
+.wf-arrow{font-size:11px;color:var(--text3);display:inline-block;transition:transform 0.2s;margin-left:4px;}
+.wf-body{border-top:1px solid var(--border);}
+
+/* DASHBOARD */
+.dash-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:14px;margin-bottom:20px;}
+.dash-card{background:var(--surface);border:1.5px solid var(--border);border-radius:14px;overflow:hidden;box-shadow:0 2px 8px rgba(100,120,200,0.06);}
+.dash-card-hdr{padding:12px 16px;background:var(--surface2);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;}
+.dash-card-name{font-size:13px;font-weight:700;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.dash-stat-row{display:flex;border-bottom:1px solid var(--border);}
+.dash-stat-row:last-child{border-bottom:none;}
+.dash-stat{flex:1;padding:12px 14px;text-align:center;border-right:1px solid var(--border);}
+.dash-stat:last-child{border-right:none;}
+.dash-stat-val{font-size:22px;font-weight:700;line-height:1;color:var(--text);}
+.dash-stat-val.accent{color:var(--accent);}
+.dash-stat-val.success{color:var(--success);}
+.dash-stat-lbl{font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;margin-top:4px;}
+.dash-section{padding:10px 14px;border-bottom:1px solid var(--border);}
+.dash-section:last-child{border-bottom:none;}
+.dash-section-title{font-size:10px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;}
+.dash-camp-row{display:flex;align-items:center;gap:8px;padding:5px 0;font-size:12px;border-bottom:1px solid var(--border);}
+.dash-camp-row:last-child{border-bottom:none;}
+.dash-camp-name{flex:1;font-weight:500;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.dash-camp-bar{height:6px;background:var(--accent);border-radius:99px;min-width:4px;transition:width 0.4s;}
+.dash-camp-count{font-size:11px;font-weight:700;color:var(--accent);flex-shrink:0;}
+.dash-loading{padding:30px;text-align:center;font-size:12px;color:var(--text3);}
+</style>
+</head>
+<body>
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <div class="logo">GHL</div>
+  <div>
+    <div class="topbar-title">Manager</div>
+    <div class="topbar-sub">Custom Values &amp; Sites</div>
+  </div>
+  <div class="conn-status">
+    <div class="status-dot" id="statusDot"></div>
+    <span class="status-lbl" id="statusLbl">Not connected</span>
+  </div>
+</div>
+
+<div class="app">
+
+<!-- SIDEBAR -->
+<div class="sidebar">
+  <button class="nav-btn" id="nav-dash" onclick="nav('dash')">Dashboard</button>
+  <button class="nav-btn active" id="nav-connect" onclick="nav('connect')">Connect</button>
+  <button class="nav-btn" id="nav-accounts" onclick="nav('accounts')">Accounts</button>
+  <button class="nav-btn" id="nav-cv" onclick="nav('cv')">Custom Values</button>
+  <button class="nav-btn" id="nav-sf" onclick="nav('sf')">Sites &amp; Funnels</button>
+  <button class="nav-btn" id="nav-auto" onclick="nav('auto')">Automations</button>
+  <button class="nav-btn" id="nav-results" onclick="nav('results')">Results</button>
+</div>
+
+<!-- MAIN -->
+<div class="main">
+
+  <!-- DASHBOARD -->
+  <div class="panel" id="panel-dash">
+    <div class="page-hdr">
+      <div><h2>Dashboard</h2><p>Leads this month and top campaigns per sub-account</p></div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <select id="dashPeriod" onchange="loadDashboard()" style="background:var(--surface2);border:1.5px solid var(--border);color:var(--text);font-family:var(--font);font-size:12px;padding:6px 10px;outline:none;border-radius:8px;">
+          <option value="30">Last 30 days</option>
+          <option value="7">Last 7 days</option>
+          <option value="90">Last 90 days</option>
+        </select>
+        <button class="btn" onclick="loadDashboard()">Load Dashboard</button>
+      </div>
+    </div>
+    <div id="dashContent"><div class="empty">Select sub-accounts in Accounts tab, then click Load Dashboard</div></div>
+  </div>
+
+  <!-- CONNECT -->
+  <div class="panel active" id="panel-connect">
+    <div class="page-hdr"><div><h2>Connect Agency</h2><p>Enter your credentials to load all sub-accounts</p></div></div>
+    <div class="card">
+      <div class="notice">Enter your <strong>Agency Token</strong> and <strong>Company ID</strong>. The Company ID is in the URL when opening your Private Integration: <code>settings/private-integrations/COMPANY_ID</code></div>
+      <div class="row2">
+        <div class="field"><label>Agency Token (pit-...)</label><input type="password" id="agencyToken" placeholder="pit-xxxx-xxxx-xxxx" autocomplete="off"></div>
+        <div class="field"><label>Company ID</label><input type="text" id="companyId" placeholder="69d52ff3199dad2848e55ea6" autocomplete="off"></div>
+      </div>
+      <div class="fe"><button class="btn" id="btnConnect" onclick="conectar()">Connect &amp; Load Sub-Accounts</button></div>
+      <div class="err-msg" id="err1"></div>
+      <div class="warn-msg" id="warn1"></div>
+    </div>
+  </div>
+
+  <!-- ACCOUNTS -->
+  <div class="panel" id="panel-accounts">
+    <div class="page-hdr">
+      <div><h2>Sub-Accounts</h2><p>Select accounts and connect their individual tokens</p></div>
+      <span class="count-lbl" id="selCount">0 selected</span>
+    </div>
+    <div class="notice">Click a sub-account to <strong>select it</strong>. Click <strong>Connect</strong> to add its token. Tokens are saved automatically.</div>
+    <div class="toolbar">
+      <button class="btn btn-ghost btn-sm" onclick="selAll(true)">Select All</button>
+      <button class="btn btn-ghost btn-sm" onclick="selAll(false)">None</button>
+      <button class="btn btn-ghost btn-sm" onclick="selConnected()">Connected Only</button>
+      <input class="search-box" type="text" placeholder="Search sub-account..." oninput="filterLocs(this.value)">
+    </div>
+    <div class="loc-list" id="locList"><div class="empty">Connect agency first</div></div>
+  </div>
+
+  <!-- CUSTOM VALUES -->
+  <div class="panel" id="panel-cv">
+    <div class="page-hdr">
+      <div><h2>Custom Values</h2><p>Edit custom values across selected sub-accounts</p></div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <input class="search-box" style="width:200px;" type="text" placeholder="Filter values..." oninput="filterCVs(this.value)">
+        <button class="btn" onclick="cargarCVs()" id="btnLoadCVs" disabled>Load Custom Values</button>
+      </div>
+    </div>
+    <div style="margin-bottom:10px;font-size:12px;font-weight:600;color:var(--text2);" id="cvInfo">Select sub-accounts in Accounts tab first, then click Load</div>
+    <!-- Brand preset buttons -->
+    <div id="brandBtns" style="display:none;margin-bottom:14px;padding:12px 16px;background:var(--surface);border:1.5px solid var(--border);border-radius:12px;">
+      <div style="font-size:11px;font-weight:700;color:var(--text2);letter-spacing:0.06em;text-transform:uppercase;margin-bottom:10px;">Auto-fill brand values for all selected accounts:</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+        <button onclick="applyBrandToAll('nnn')" style="background:#00b4d8;color:#fff;border:none;font-family:var(--font);font-size:12px;font-weight:700;padding:9px 20px;border-radius:50px;cursor:pointer;box-shadow:0 2px 8px rgba(0,180,216,0.3);">No Needle Needed</button>
+        <button onclick="applyBrandToAll('ftb')" style="background:#ff1d8d;color:#fff;border:none;font-family:var(--font);font-size:12px;font-weight:700;padding:9px 20px;border-radius:50px;cursor:pointer;box-shadow:0 2px 8px rgba(255,29,141,0.3);">First Touch Beauty</button>
+        <button onclick="applyBrandToAll('advb')" style="background:#7b2ff7;color:#fff;border:none;font-family:var(--font);font-size:12px;font-weight:700;padding:9px 20px;border-radius:50px;cursor:pointer;box-shadow:0 2px 8px rgba(123,47,247,0.3);">Adv Beauty Treatments</button>
+        <button onclick="applyBrandToAll('general')" style="background:#00c97a;color:#fff;border:none;font-family:var(--font);font-size:12px;font-weight:700;padding:9px 20px;border-radius:50px;cursor:pointer;box-shadow:0 2px 8px rgba(0,201,122,0.3);">General CVs</button>
+        <span style="font-size:11px;color:var(--text3);">Fills: Pixel ID, Privacy Policy, Terms &amp; Email</span>
+      </div>
+    </div>
+    <div class="cv-wrap" id="cvWrap"><div class="empty">Select sub-accounts and click Load Custom Values</div></div>
+    <div class="sp"></div>
+    <div class="fe">
+      <button class="btn btn-ok" id="btnApply" onclick="aplicar()">Apply Changes</button>
+    </div>
+    <div class="err-msg" id="err2"></div>
+    <div class="err-msg" id="err3"></div>
+  </div>
+
+  <!-- AUTOMATIONS -->
+  <div class="panel" id="panel-auto">
+    <div class="page-hdr">
+      <div><h2>Automations</h2><p>Workflows per sub-account — status, enrollment and run history</p></div>
+    </div>
+    <div class="sf-tabs" id="autoTabs"></div>
+    <div id="autoContent"><div class="empty">Select a sub-account tab above</div></div>
+  </div>
+
+  <!-- AUTOMATIONS -->
+  <div class="panel" id="panel-auto">
+    <div class="page-hdr"><div><h2>Automations</h2><p>Workflows per sub-account — click to see leads</p></div></div>
+    <div class="sf-tabs" id="autoTabs"></div>
+    <div id="autoContent"><div class="empty">Select connected sub-accounts first</div></div>
+  </div>
+
+  <!-- RESULTS -->
+  <div class="panel" id="panel-results">
+    <div class="page-hdr"><div><h2>Results</h2></div></div>
+    <div class="stats-row">
+      <div class="stat total"><div class="stat-val" id="sTotal">0</div><div class="stat-lbl">Total</div></div>
+      <div class="stat ok"><div class="stat-val" id="sOk">0</div><div class="stat-lbl">Successful</div></div>
+      <div class="stat err"><div class="stat-val" id="sErr">0</div><div class="stat-lbl">Errors</div></div>
+    </div>
+    <div class="progress"><div class="progress-fill" id="progFill"></div></div>
+    <div class="log" id="logBox"></div>
+    <div class="sp"></div>
+    <div class="fe"><button class="btn btn-ghost" onclick="nav('cv')">Back to Custom Values</button></div>
+  </div>
+
+  <!-- SITES & FUNNELS -->
+  <!-- Legacy hidden elements needed by old JS -->
+  <div id="sfDebugBox" style="display:none;"></div>
+  <div id="sfLocTabs" style="display:none;"></div>
+  <div id="stepSF" style="display:none;"></div>
+  <button id="btnReconnect" style="display:none;"></button>
+  <button id="btnSF" style="display:none;"></button>
+  <div class="panel" id="panel-sf">
+    <div class="page-hdr">
+      <div><h2>Sites &amp; Funnels</h2><p>View funnel steps and links per sub-account — <a href="#" onclick="showBookmarklet();return false;" style="color:var(--accent);font-weight:600;">Get Page Scanner Bookmarklet</a></p></div>
+    </div>
+    <div class="sf-tabs" id="sfTabs"></div>
+    <div id="sfPixelBar" style="display:none;align-items:center;gap:10px;padding:8px 14px;background:rgba(24,119,242,0.05);border:1.5px solid rgba(24,119,242,0.15);border-radius:10px;margin-bottom:10px;flex-wrap:wrap;"></div>
+    <div id="sfPixelStatus" style="display:none;margin-bottom:10px;padding:10px 14px;background:var(--surface);border:1.5px solid var(--border);border-radius:10px;font-size:12px;max-height:200px;overflow-y:auto;"></div>
+    <div id="sfContent"><div class="empty">Select a sub-account tab above</div></div>
+  </div>
+
+</div><!-- /main -->
+</div><!-- /app -->
+
+<script>
+
+
+
+const BASE = 'https://services.leadconnectorhq.com';
+const STORAGE_KEY = 'ghl_loc_tokens_v2';
+let agencyToken = '', companyId = '';
+let allLocs = [], selected = new Set();
+let cvData = {}, allCvKeys = [];
+
+const DOMAIN_KEY = 'ghl_loc_domains';
+function loadDomains() { try { return JSON.parse(localStorage.getItem(DOMAIN_KEY) || '{}'); } catch(e) { return {}; } }
+function saveDomain(id, domain) { const d = loadDomains(); d[id] = domain; localStorage.setItem(DOMAIN_KEY, JSON.stringify(d)); }
+function getDomain(id) {
+  // First check manually saved domain
+  const saved = loadDomains()[id];
+  if (saved) return saved;
+  // Then check CSV by location name
+  const loc = allLocs.find(l => l.id === id);
+  if (loc) {
+    const csvDomain = getDomainFromCSV(loc.name || loc.businessName || '');
+    if (csvDomain) return csvDomain;
+  }
+  return '';
+}
+
+// Pre-loaded domain map from CSV (name -> domain)
+const CSV_DOMAINS = {
+  "Skin Totale Orange": "skintotale.firstouchbeauty.com",
+  "Skin Totale San Juan": "skintotalesj.noneedleneeded.com",
+  "Oasis Henderson": "oasishenderson.noneedleneeded.com",
+  "Parie Med Spa": "pariemedspa.noneedleneeded.com",
+  "Below Zero Alpharetta": "belowzeroalpha.firstouchbeauty.com",
+  "Nova Aesthetics": "novaaesthetic.firstouchbeauty.com",
+  "Prime Clinic": "primeclinic.advancedbeautytreatments.com",
+  "Ben’s Beauty Irvine": "bensbeautypasa.noneedleneeded.com",
+  "Ben’s Beauty Pasadena": "bensbeautypasa.noneedleneeded.com",
+  "Glameria": "glameria.firstouchbeauty.com",
+  "Pura Vida": "puravida.noneedleneeded.com",
+  "Queen Bee Limited Greenwood": "queenbeegw.firstouchbeauty.com",
+  "Moana Crystals": "moana.advancedbeautytreatments.com",
+  "Ora Medical Spa": "ora-med.firstouchbeauty.com",
+  "Velora Med Spa": "velora.advancedbeautytreatments.com",
+  "Dermalogy": "dermalogy.noneedleneeded.com",
+  "Beauty Lounge": "beauty-lounge.noneedleneeded.com",
+  "Good Life Spa": "goodlife.firstouchbeauty.com",
+  "Mize Med Spa and Wellness Center": "mizemedspa.firstouchbeauty.com",
+  "Soap Tree Omaha": "soaptree-omaha.advancedbeautytreatments.com",
+  "Equanimity Wellness Studio": "equanimity.noneedleneeded.com",
+  "Elysium Cosmetic Clinic": "elysium.noneedleneeded.com",
+  "Lumera Skin Clinics": "lumera.advancedbeautytreatments.com",
+  "Tesoro Mio Spa": "tesoro-mio.advancedbeautytreatments.com",
+  "TKO Beauty Tech": "tko.firstouchbeauty.com",
+  "Meital Studios": "meital-studio.firstouchbeauty.com",
+  "Minarelle": "minarelle.noneedleneeded.com",
+  "Kristals Cosmetics Burlington": "kristals-burlington.noneedleneeded.com",
+  "Nova Aesthetic Oakville": "novaaesthetics-oak.firstouchbeauty.com",
+  "Renova Skin Med Spa": "renova.firstouchbeauty.com",
+  "Terra Alma": "terraalma.firstouchbeauty.com",
+  "Queen Bee Palm Springs": "queenbee-ps.firstouchbeauty.com",
+  "Natural Blossom by Adore": "naturalblossom.noneedleneeded.com",
+  "Premier Naples": "premier-naples.noneedleneeded.com",
+  "Joli Visage": "jolivisage.noneedleneeded.com",
+  "Adore Cookstown": "adore-cooks.noneedleneeded.com",
+  "Donna Ella Spa": "donnaella.advancedbeautytreatments.com",
+  "Oasis Aesthetics St Mary's": "oasis-stmary.noneedleneeded.com",
+  "Aeternitas": "aeternitas.firstouchbeauty.com",
+  "Auraderma Spa": "auraderma.noneedleneeded.com",
+  "Beauty Affairs MediSpa Brookvale": "beauty-affairs-brook.noneedleneeded.com",
+  "Beauty Affairs MediSpa CBD": "beautyaffairs.noneedleneeded.com",
+  "Below Zero Rochester": "belowz-roch.firstouchbeauty.com",
+  "Ben's Beauty Pasadena": "bensbeautypasa.noneedleneeded.com",
+  "Ben's Beauty Irvine": "bensbeautypasa.noneedleneeded.com",
+  "Blesseli Spa": "blesseli.advancedbeautytreatments.com",
+  "Chantel Beauty Spa": "chantelbeauty.firstouchbeauty.com",
+  "Dermalogy Med Spa": "dermalogy.noneedleneeded.com",
+  "Elysium Cosmetic Clinics": "elysium.noneedleneeded.com",
+  "Esthetix Raleigh": "esthetix-raleigh.noneedleneeded.com",
+  "FIL Fall In Love": "fil.noneedleneeded.com",
+  "Florentine Skincare & Cosmetics": "florentine.noneedleneeded.com",
+  "Forest Hill Cosmetic Clinic": "foresthillclinic.firstouchbeauty.com",
+  "Gentle Touch Beauty": "gentletouch.noneedleneeded.com",
+  "Hermetise": "hermetise-nc.noneedleneeded.com",
+  "Joli Visage Naples": "jolivisage.noneedleneeded.com",
+  "Meital Studios Beauty": "meital-studio.firstouchbeauty.com",
+  "Nova Aesthetic": "novaaesthetic.firstouchbeauty.com",
+  "Oasis Aesthetic Spa Henderson": "oasishenderson.noneedleneeded.com",
+  "Oasis Aesthetic Spa Marine": "oasis-marine.noneedleneeded.com",
+  "Oasis Aesthetic Spa Ness": "oasis-ness.noneedleneeded.com",
+  "Oasis Aesthetic Spa St Mary's": "oasis-stmary.noneedleneeded.com",
+  "ReNova Skin Med Spa": "renova.firstouchbeauty.com",
+  "Skin Analytics": "skin-analytics.noneedleneeded.com",
+  "Skin Totale MedSpa Orange": "skintotale.firstouchbeauty.com",
+  "Skin Totale MedSpa San Juan": "skintotalesj.noneedleneeded.com",
+  "Solei Beaity Lounge": "soleibeautylounge.firstouchbeauty.com",
+  "Solei Beaity Lounge MO": "soleibl-mo.noneedleneeded.com",
+  "Terra Alma Clinic": "terraalma.firstouchbeauty.com",
+  "TKO Beauty Tech - Spa": "tko.firstouchbeauty.com",
+  "VillaGio Spa": "villagio.firstouchbeauty.com"
+};
+
+
+// Match location name to CSV domain (fuzzy match)
+function getDomainFromCSV(locName) {
+  if (!locName) return '';
+  const n = locName.toLowerCase().trim();
+  // Exact match first
+  for (const [k, v] of Object.entries(CSV_DOMAINS)) {
+    if (k.toLowerCase() === n) return v;
+  }
+  // Partial match
+  for (const [k, v] of Object.entries(CSV_DOMAINS)) {
+    if (n.includes(k.toLowerCase()) || k.toLowerCase().includes(n)) return v;
+  }
+  return '';
+}
+
+function loadTokens() { try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); } catch(e) { return {}; } }
+
+// ── AUTOMATIONS ───────────────────────────────────────────────
+function buildAutoTabs() {
+  const tabs = document.getElementById('autoTabs');
+  const toShow = [...selected].filter(id => getToken(id));
+  if (!toShow.length) {
+    tabs.innerHTML = '<span style="font-size:12px;color:var(--text3);">Select sub-accounts in Accounts tab first.</span>';
+    document.getElementById('autoContent').innerHTML = '<div class="empty">No accounts selected</div>';
+    return;
+  }
+  tabs.innerHTML = toShow.map((id, i) => {
+    const l = allLocs.find(x => x.id === id);
+    const name = l ? (l.name || l.businessName || id) : id;
+    return `<div class="sf-tab ${i===0?'active':''}" onclick="selectAutoTab('${id}',this)">${esc(name)}</div>`;
+  }).join('');
+  loadAuto(toShow[0], tabs.firstChild);
+}
+
+function selectAutoTab(locId, tabEl) {
+  document.querySelectorAll('#autoTabs .sf-tab').forEach(t => t.classList.remove('active'));
+  if (tabEl) tabEl.classList.add('active');
+  loadAuto(locId, tabEl);
+}
+
+async function loadAuto(locId, tabEl) {
+  const el = document.getElementById('autoContent');
+  el.innerHTML = '<div style="padding:20px;font-size:12px;color:var(--text2);"><span class="spinner"></span> Loading workflows...</div>';
+  const tok = getToken(locId);
+  if (!tok) { el.innerHTML = '<div class="empty">No token for this account</div>'; return; }
+
+  let workflows = [];
+  try {
+    const data = await apiFetch(tok, 'GET', '/workflows/?locationId=' + locId);
+    workflows = data.workflows || data.data || data.list || [];
+  } catch(e) {
+    el.innerHTML = '<div class="empty" style="color:var(--error);">Error: ' + esc(e.message) + '</div>';
+    return;
+  }
+
+  if (!workflows.length) {
+    el.innerHTML = '<div class="empty">No workflows found.</div>';
+    return;
+  }
+
+  let html = '<div style="display:flex;flex-direction:column;gap:8px;">';
+  workflows.forEach(wf => {
+    const name = wf.name || wf.title || 'Unnamed';
+    const status = wf.status || wf.workflowStatus || 'unknown';
+    const isActive = ['published','active','live'].includes(status.toLowerCase());
+    const createdAt = wf.createdAt ? new Date(wf.createdAt).toLocaleDateString() : '';
+    const updatedAt = wf.updatedAt ? new Date(wf.updatedAt).toLocaleDateString() : '';
+    const createdBy = wf.createdBy || wf.addedBy || '';
+    html += `<div class="wf-card">
+      <div class="wf-header">
+        <div class="wf-info">
+          <div class="wf-name">${esc(name)}</div>
+          <div class="wf-meta">
+            ${createdBy ? `<span>By: <strong>${esc(createdBy)}</strong></span>` : ''}
+            ${createdAt ? `<span>Created: ${createdAt}</span>` : ''}
+            ${updatedAt ? `<span>Updated: ${updatedAt}</span>` : ''}
+          </div>
+        </div>
+        <span class="wf-status ${isActive?'active':'inactive'}">${esc(status)}</span>
+      </div>
+    </div>`;
+  });
+  html += '</div>';
+  el.innerHTML = html;
+}
+
+
+// Auto-fill saved credentials on load
+
+// ── AUTOMATIONS ──────────────────────────────────────────────
+function buildAutoTabs() {
+  const tabs = document.getElementById('autoTabs');
+  const toShow = [...selected].filter(id => getToken(id));
+  if (!toShow.length) {
+    tabs.innerHTML = '<span style="font-size:12px;color:var(--text3);">Select connected sub-accounts first.</span>';
+    document.getElementById('autoContent').innerHTML = '<div class="empty">No connected accounts selected</div>';
+    return;
+  }
+  tabs.innerHTML = toShow.map((id, i) => {
+    const l = allLocs.find(x => x.id === id);
+    return `<div class="sf-tab ${i===0?'active':''}" onclick="selectAutoTab('${id}',this)">${esc(l?l.name||l.businessName||id:id)}</div>`;
+  }).join('');
+  loadAuto(toShow[0], tabs.firstChild);
+}
+
+function selectAutoTab(locId, tabEl) {
+  document.querySelectorAll('#autoTabs .sf-tab').forEach(t => t.classList.remove('active'));
+  if (tabEl) tabEl.classList.add('active');
+  loadAuto(locId, tabEl);
+}
+
+async function loadAuto(locId) {
+  const el = document.getElementById('autoContent');
+  el.innerHTML = '<div style="padding:20px;font-size:12px;color:var(--text2);"><span class="spinner"></span> Loading workflows...</div>';
+  const tok = getToken(locId);
+  if (!tok) { el.innerHTML = '<div class="empty">No token</div>'; return; }
+  let workflows = [];
+  try {
+    const data = await apiFetch(tok, 'GET', '/workflows/?locationId=' + locId);
+    workflows = data.workflows || data.data || data.list || [];
+  } catch(e) {
+    el.innerHTML = '<div class="empty" style="color:var(--error);">Error: ' + esc(e.message) + '</div>';
+    return;
+  }
+  if (!workflows.length) { el.innerHTML = '<div class="empty">No workflows found.</div>'; return; }
+  window._autoToks = window._autoToks || {};
+  window._autoToks[locId] = tok;
+  let html = '<div style="display:flex;flex-direction:column;gap:8px;">';
+  workflows.forEach((wf, wi) => {
+    const name = wf.name || wf.title || 'Unnamed';
+    const status = wf.status || wf.workflowStatus || 'unknown';
+    const isActive = ['published','active','live'].includes(status.toLowerCase());
+    const createdAt = wf.createdAt ? new Date(wf.createdAt).toLocaleDateString() : '';
+    const wfId = wf.id || wf._id || '';
+    html += `<div class="wf-card" id="wfc-${wi}" data-locid="${locId}" data-wfid="${wfId}">
+      <div class="wf-hdr" onclick="toggleWFBody(${wi})">
+        <div style="flex:1;min-width:0;">
+          <div class="wf-name">${esc(name)}</div>
+          ${createdAt?`<div class="wf-meta">${createdAt}</div>`:''}
+        </div>
+        <span class="wf-status ${isActive?'active':'inactive'}">${esc(status)}</span>
+        <span class="wf-arrow" id="wfarrow-${wi}">&#9654;</span>
+      </div>
+      <div class="wf-body" id="wfbody-${wi}" style="display:none;"></div>
+    </div>`;
+  });
+  html += '</div>';
+  el.innerHTML = html;
+}
+
+async function toggleWFBody(wi) {
+  const card = document.getElementById('wfc-' + wi);
+  const body = document.getElementById('wfbody-' + wi);
+  const arrow = document.getElementById('wfarrow-' + wi);
+  if (!card || !body) return;
+  const isOpen = body.style.display !== 'none';
+  body.style.display = isOpen ? 'none' : 'block';
+  if (arrow) arrow.style.transform = isOpen ? '' : 'rotate(90deg)';
+  if (isOpen || body.dataset.loaded) return;
+  body.dataset.loaded = '1';
+  const locId = card.dataset.locid;
+  const wfId = card.dataset.wfid;
+  const tok = (window._autoToks || {})[locId] || '';
+  body.innerHTML = '<div style="padding:12px 16px;font-size:12px;color:var(--text2);"><span class="spinner"></span> Loading leads...</div>';
+  try {
+    // Load custom field definitions to map id -> name
+    const cfDefs = {};
+    try {
+      const cfd = await apiFetch(tok, 'GET', '/locations/' + locId + '/customFields');
+      const fields = cfd.customFields || cfd.data || [];
+      fields.forEach(f => {
+        if (f.id) cfDefs[f.id] = f.name || f.fieldKey || f.id;
+      });
+    } catch(e) { /* optional */ }
+
+    // Try workflow-specific contacts endpoint first
+    let wfContacts = [];
+    let allContacts = [];
+    try {
+      // GHL has a dedicated endpoint for workflow contacts
+      let wfPage = 1;
+      while (true) {
+        const wd = await apiFetch(tok, 'GET', 
+          '/workflows/' + wfId + '/contacts?locationId=' + locId + '&limit=100&page=' + wfPage);
+        const batch = wd.contacts || wd.data || wd.list || [];
+        wfContacts = wfContacts.concat(batch);
+        const total = wd.total || wd.count || 0;
+        if (batch.length < 100 || (total && wfContacts.length >= total)) break;
+        wfPage++;
+        if (wfPage > 10) break; // max 1000
+        await sleep(100);
+      }
+      allContacts = wfContacts;
+    } catch(e) {
+      // Fallback: load contacts and filter by workflow
+      for (let p = 1; p <= 5; p++) {
+        try {
+          const d = await apiFetch(tok, 'GET', 
+            '/contacts/?locationId=' + locId + '&limit=100&sortBy=date_added&page=' + p);
+          const batch = d.contacts || d.data || [];
+          allContacts = allContacts.concat(batch);
+          if (batch.length < 100) break;
+        } catch(e2) { break; }
+      }
+      wfContacts = allContacts.filter(c => {
+        const wfs = c.workflows || c.workflowIds || [];
+        return wfs.some(w => (w.id || w.workflowId || w) === wfId);
+      });
+    }
+
+    // Helper: get custom field value by name (case-insensitive)
+    function getCF(contact, name) {
+      const fields = contact.customFields || [];
+      const nl = name.toLowerCase();
+      // First try by mapped name from cfDefs
+      for (const f of fields) {
+        const defName = (cfDefs[f.id] || f.fieldKey || f.id || '').toLowerCase();
+        if (defName.includes(nl) && f.value) return f.value;
+      }
+      return '';
+    }
+
+    // Group ALL contacts by Form Name custom field
+    const fbForms = {};
+    let fbTotal2 = 0;
+
+    allContacts.forEach(c => {
+      const attr = c.attributionSource || {};
+      const src = (c.source || '').toLowerCase();
+
+      // Get FB-specific fields from custom fields
+      const formName = getCF(c, 'form name') || getCF(c, 'form_name');
+      const campaignName = getCF(c, 'campaign name') || getCF(c, 'campaign_name');
+      const adName2 = getCF(c, 'ad name') || getCF(c, 'ad_name');
+      const adsetName = getCF(c, 'adset name') || getCF(c, 'adset_name');
+      const fbFormId = getCF(c, 'fb form id') || getCF(c, 'fb_form_id');
+      const fbLeadgenId = getCF(c, 'fb leadgen id') || getCF(c, 'fb_leadgen_id') || getCF(c, 'leadgen');
+
+      // Detect FB lead by custom fields or source
+      const isFB = !!formName || !!fbFormId || !!fbLeadgenId ||
+                   src.includes('facebook') || src.includes('fb') ||
+                   (attr.utmSource||'').toLowerCase().includes('facebook') ||
+                   !!attr.fbclid;
+
+      if (!isFB) return;
+      fbTotal2++;
+
+      // Group by Form Name > Campaign Name > Ad Name > source
+      const groupKey = formName || campaignName || adName2 || adsetName || c.source || 'Facebook Lead Ad';
+      if (!fbForms[groupKey]) fbForms[groupKey] = { leads: [], formName, campaignName, adName: adName2, adsetName, fbFormId };
+      fbForms[groupKey].leads.push(c);
+    });
+
+    const fbTotal = fbTotal2;
+
+    const formEntries = Object.entries(fbForms).sort((a,b) => b[1].leads.length - a[1].leads.length);
+
+    let html = '';
+
+    // FB section
+    html += `<div style="background:rgba(24,119,242,0.04);border-bottom:1px solid rgba(24,119,242,0.15);">
+      <div style="padding:10px 16px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <div style="width:22px;height:22px;background:#1877F2;border-radius:5px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:12px;flex-shrink:0;">f</div>
+        <span style="font-size:12px;font-weight:700;color:#1877F2;">Facebook Lead Forms</span>
+        <span style="background:#1877F2;color:#fff;font-size:11px;font-weight:700;padding:3px 10px;border-radius:50px;">${fbTotal} leads</span>
+        <span style="font-size:11px;color:var(--text3);">${formEntries.length} form(s) detected</span>
+        <button onclick="showContactDebug(this)" data-locid="${locId}" style="margin-left:auto;background:transparent;border:1px solid var(--border2);color:var(--text3);font-size:10px;padding:2px 8px;border-radius:50px;cursor:pointer;font-family:var(--font);">Debug fields</button>
+      </div>`;
+
+    if (formEntries.length) {
+      formEntries.forEach(([groupKey, data]) => {
+        const leads = data.leads;
+        const meta = [
+          data.campaignName ? 'Campaign: ' + data.campaignName : '',
+          data.adName ? 'Ad: ' + data.adName : '',
+          data.adsetName ? 'Adset: ' + data.adsetName : '',
+          data.fbFormId ? 'Form ID: ' + data.fbFormId : '',
+        ].filter(Boolean).join(' · ');
+
+        // Store leads for export using numeric index
+        window._exportList = window._exportList || [];
+        const exportIdx = window._exportList.length;
+        window._exportList.push({ name: groupKey, leads: leads, cfDefs: cfDefs });
+
+        html += `<details style="border-top:1px solid rgba(24,119,242,0.1);">
+          <summary style="padding:8px 16px 8px 16px;cursor:pointer;display:flex;align-items:flex-start;gap:8px;font-size:12px;user-select:none;">
+            <div style="flex:1;min-width:0;">
+              <div style="font-weight:700;color:var(--text);">${esc(groupKey)}</div>
+              ${meta ? `<div style="font-size:10px;color:var(--text3);margin-top:2px;">${esc(meta)}</div>` : ''}
+            </div>
+            <span style="background:rgba(24,119,242,0.1);color:#1877F2;font-size:11px;font-weight:700;padding:2px 8px;border-radius:50px;flex-shrink:0;">${leads.length} leads</span>
+            <button onclick="event.preventDefault();event.stopPropagation();exportFormLeads(${exportIdx})"
+              style="background:#1877F2;color:#fff;border:none;font-family:var(--font);font-size:10px;font-weight:700;padding:3px 10px;border-radius:50px;cursor:pointer;flex-shrink:0;margin-left:4px;">
+              &#8595; CSV
+            </button>
+          </summary>
+          <div>`;
+        leads.slice(0,30).forEach(c => {
+          const name = [c.firstName,c.lastName].filter(Boolean).join(' ') || c.email || 'Unknown';
+          const created = (c.dateAdded||c.createdAt) ? new Date(c.dateAdded||c.createdAt).toLocaleDateString() : '';
+          const cfCampaign = getCF(c,'campaign name') || getCF(c,'ad name') || '';
+          html += `<div style="display:flex;align-items:center;gap:8px;padding:5px 16px 5px 24px;border-bottom:1px solid var(--border);font-size:11px;">
+            <div style="width:24px;height:24px;border-radius:50%;background:#1877F2;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:10px;flex-shrink:0;">${esc((name[0]||'?').toUpperCase())}</div>
+            <div style="flex:1;min-width:0;">
+              <div style="font-weight:600;">${esc(name)}</div>
+              <div style="color:var(--text3);font-size:10px;">${esc([c.email,c.phone].filter(Boolean).join(' · '))}</div>
+            </div>
+            ${cfCampaign ? `<span style="font-size:10px;color:#1877F2;flex-shrink:0;">${esc(cfCampaign)}</span>` : ''}
+            <span style="color:var(--text3);font-size:10px;flex-shrink:0;">${created}</span>
+          </div>`;
+        });
+        if (leads.length > 30) html += `<div style="padding:5px 16px;font-size:10px;color:var(--text3);">+${leads.length-30} more</div>`;
+        html += `</div></details>`;
+      });
+    } else {
+      html += `<div style="padding:8px 16px 12px;font-size:11px;color:var(--text3);">No Facebook leads detected in the loaded contacts.</div>`;
+    }
+    html += '</div>';
+
+    // All workflow leads
+    html += `<div style="padding:8px 16px;background:var(--surface2);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;">
+      <span style="font-size:12px;font-weight:700;">All leads in workflow</span>
+      <span style="background:var(--accent);color:#fff;font-size:11px;font-weight:700;padding:3px 10px;border-radius:50px;">${wfContacts.length}</span>
+      <span style="font-size:11px;color:var(--text3);">(from ${allContacts.length} loaded)</span>
+    </div>`;
+
+    if (!wfContacts.length) {
+      html += '<div style="padding:12px 16px;font-size:12px;color:var(--text3);">No contacts found in this workflow.</div>';
+    } else {
+      html += '<div style="max-height:200px;overflow-y:auto;">';
+      wfContacts.slice(0,50).forEach(c => {
+        const name = [c.firstName,c.lastName].filter(Boolean).join(' ') || c.email || c.phone || 'Unknown';
+        const source = c.source || '';
+        const created = (c.dateAdded||c.createdAt) ? new Date(c.dateAdded||c.createdAt).toLocaleDateString() : '';
+        html += `<div style="display:flex;align-items:center;gap:8px;padding:6px 16px;border-bottom:1px solid var(--border);font-size:11px;">
+          <div style="width:26px;height:26px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:10px;flex-shrink:0;">${esc((name[0]||'?').toUpperCase())}</div>
+          <div style="flex:1;min-width:0;"><div style="font-weight:600;">${esc(name)}</div><div style="color:var(--text3);font-size:10px;">${esc([c.email,c.phone].filter(Boolean).join(' · '))}</div></div>
+          ${source?'<span style="font-size:10px;background:var(--surface2);border:1px solid var(--border);border-radius:50px;padding:2px 6px;flex-shrink:0;">'+esc(source)+'</span>':''}
+          <span style="color:var(--text3);font-size:10px;flex-shrink:0;">${created}</span>
+        </div>`;
+      });
+      html += '</div>';
+    }
+    body.innerHTML = html;
+  } catch(e) {
+    body.innerHTML = '<div style="padding:12px 16px;font-size:12px;color:var(--error);">Error: ' + esc(e.message) + '</div>';
+  }
+}
+
+
+// ── INJECT TRACKING SCRIPT TO FORM PAGES ─────────────────────
+
+function getFooterScript(locId) {
+  const field = getAcuityField(locId) || 'field:REPLACE_ME';
+  const parts = [
+    '<!-- MARKETING DATA TRACKER -->',
+    '<scr'+'ipt>',
+    '(function() {',
+    "  'use strict';",
+    "  const ACUITY_FIELD_ID = '" + "' + field + '",
+    "  const STORAGE_KEY = 'marketing_json_store';",
+    "  function getBaseUrl(url) { if (!url) return ''; return url.split('?')[0]; }",
+    "  function getUrlParams() { const p={}; new URLSearchParams(window.location.search).forEach((v,k)=>{ if(k!=='full_url_utm'&&k!=='referrer') p[k]=v; }); return p; }",
+    "  function getTrackingCookies() { const c={}; if(document.cookie) document.cookie.split(';').forEach(x=>{ const[k,v]=x.trim().split('='); if(k&&k.match(/_fbc|_fbp|gclid|_ga|ttclid/)) c[k]=decodeURIComponent(v||''); }); return c; }",
+    "  async function captureAndPrepareData() {",
+    "    let s={}; try{s=JSON.parse(sessionStorage.getItem('marketing_json_store')||'{}');}catch(e){}",
+    "    let ip=s.ip||null; if(!ip){try{const r=await fetch('https://api.ipify.org?format=json');ip=(await r.json()).ip;}catch(e){ip='unknown';}}",
+    "    const d={...s,...getUrlParams(),...getTrackingCookies(),referrer:getBaseUrl(document.referrer)||s.referrer||'direct',landing_page:s.landing_page||getBaseUrl(window.location.href),current_page:getBaseUrl(window.location.href),user_agent:navigator.userAgent,screen_res:window.screen.width+'x'+window.screen.height,ip,timestamp:new Date().toISOString()};",
+    "    sessionStorage.setItem('marketing_json_store',JSON.stringify(d)); return JSON.stringify(d);",
+    "  }",
+    "  function injectIntoAcuity(j) {",
+    "    const f=document.querySelector('iframe[src*=\'acuityscheduling.com\']'); if(!f) return false;",
+    "    if(f.getAttribute('data-tracking-injected')==='true') return true;",
+    "    let src=f.src; if(src.includes(ACUITY_FIELD_ID)){f.setAttribute('data-tracking-injected','true');return true;}",
+    "    f.src=src+(src.includes('?')?'&':'?')+ACUITY_FIELD_ID+'='+encodeURIComponent(j);",
+    "    f.setAttribute('data-tracking-injected','true'); return true;",
+    "  }",
+    "  async function init(){const j=await captureAndPrepareData();injectIntoAcuity(j);let a=0;const i=setInterval(()=>{if(injectIntoAcuity(j)||++a>40)clearInterval(i);},500);}",
+    "  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',init); else init();",
+    '})();',
+    '</'+'script>'
+  ];
+  return parts.join('\n');
+}
+
+
+const TRACKING_SCRIPT = `(async () => {
+  try {
+    const ipPromise = fetch('https://api.ipify.org?format=json').then(r=>r.json()).then(j=>j.ip).catch(()=>'');
+    const getCookie = (name) => { const m = document.cookie.match(new RegExp('(?:^|; )' + name.replace(/([.$?*|{}()[\\]\\/+^])/g,'\\\\$1') + '=([^;]*)')); return m ? decodeURIComponent(m[1]) : ''; };
+    const delay = (ms) => new Promise(r => setTimeout(r, ms));
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has('user_ip_address')) {
+      const fbclid = url.searchParams.get('fbclid') || '';
+      const readCookies = () => ({ fbc: getCookie('_fbc') || getCookie('fbc') || '', fbp: getCookie('_fbp') || getCookie('fbp') || '' });
+      let { fbc, fbp } = readCookies();
+      if (fbclid && !(fbc && fbc.endsWith('.' + fbclid))) {
+        const start = Date.now();
+        while (Date.now() - start < 800) { await delay(80); const now = readCookies(); if (now.fbc) fbc = now.fbc; if (now.fbp) fbp = now.fbp; if (now.fbc && now.fbc.endsWith('.' + fbclid)) break; }
+      }
+      const ip = await ipPromise;
+      url.searchParams.set('user_ip_address', ip);
+      url.searchParams.set('user_agent', navigator.userAgent);
+      if (fbc) url.searchParams.set('fbc', fbc);
+      if (fbp) url.searchParams.set('fbp', fbp);
+      url.searchParams.set('buildfbc', 'fb.1.' + Date.now() + '.' + (fbclid || (Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2))));
+      const finalWithoutFull = url.toString();
+      url.searchParams.set('full_url_utm', finalWithoutFull);
+      window.location.replace(url.toString());
+    }
+  } catch(err) { console.error('Error adding params:', err); }
+})();`;
+
+function enableInjectBtn() {
+  const btn = document.getElementById('btnInjectScript');
+  if (btn) btn.disabled = false;
+}
+
+
+
+async function openFunnelSettings(locId, funnelId, btn) {
+  const el = document.getElementById('fsettings-' + funnelId);
+  if (!el) return;
+
+  if (el.style.display !== 'none') {
+    el.style.display = 'none';
+    return;
+  }
+
+  el.style.display = 'block';
+  el.innerHTML = '<div style="padding:12px 16px;font-size:12px;color:var(--text2);"><span class="spinner"></span> Loading settings...</div>';
+
+  const tok = getToken(locId);
+  if (!tok) { el.innerHTML = '<div style="padding:12px;color:var(--error);">No token</div>'; return; }
+
+  try {
+    // Get funnel details
+    const fd = await apiFetch(tok, 'GET', '/funnels/funnel/list?locationId=' + locId + '&limit=100');
+    const funnels = fd.funnels || fd.data || fd.list || fd.items || [];
+    const funnel = funnels.find(f => (f.id||f._id) === funnelId);
+    if (!funnel) { el.innerHTML = '<div style="padding:12px;color:var(--error);">Funnel not found</div>'; return; }
+
+    const name = funnel.name || funnel.title || '';
+    const headCode = funnel.headCode || funnel.headerCode || funnel.head || '';
+    const bodyCode = funnel.bodyCode || funnel.footerCode || funnel.body || '';
+
+    el.innerHTML = `<div style="padding:14px 16px;background:var(--surface2);">
+      <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:12px;">Funnel Settings</div>
+      
+      <div style="margin-bottom:10px;">
+        <label style="font-size:11px;font-weight:600;color:var(--text2);display:block;margin-bottom:4px;">Funnel Name</label>
+        <input id="fs-name-${funnelId}" type="text" value="${esc(name)}" 
+          style="width:100%;background:var(--surface);border:1.5px solid var(--border);color:var(--text);font-family:var(--font);font-size:12px;padding:7px 10px;outline:none;border-radius:8px;box-sizing:border-box;">
+      </div>
+
+      <div style="margin-bottom:10px;">
+        <label style="font-size:11px;font-weight:600;color:var(--text2);display:block;margin-bottom:4px;">Head Tracking Code</label>
+        <textarea id="fs-head-${funnelId}" rows="5"
+          style="width:100%;background:var(--surface);border:1.5px solid var(--border);color:var(--text);font-family:monospace;font-size:11px;padding:7px 10px;outline:none;border-radius:8px;box-sizing:border-box;resize:vertical;">${esc(headCode)}</textarea>
+      </div>
+
+      <div style="margin-bottom:12px;">
+        <label style="font-size:11px;font-weight:600;color:var(--text2);display:block;margin-bottom:4px;">Body Tracking Code</label>
+        <textarea id="fs-body-${funnelId}" rows="5"
+          style="width:100%;background:var(--surface);border:1.5px solid var(--border);color:var(--text);font-family:monospace;font-size:11px;padding:7px 10px;outline:none;border-radius:8px;box-sizing:border-box;resize:vertical;">${esc(bodyCode)}</textarea>
+      </div>
+
+      <div style="display:flex;gap:8px;align-items:center;">
+        <button class="btn btn-sm" id="fs-save-${funnelId}" onclick="saveFunnelSettings('${locId}','${funnelId}')">Save Settings</button>
+        <button class="btn btn-ghost btn-sm" onclick="document.getElementById('fsettings-${funnelId}').style.display='none'">Cancel</button>
+        <div id="fs-status-${funnelId}" style="font-size:11px;color:var(--text3);"></div>
+      </div>
+    </div>`;
+  } catch(e) {
+    el.innerHTML = '<div style="padding:12px;color:var(--error);">Error: ' + esc(e.message) + '</div>';
+  }
+}
+
+async function saveFunnelSettings(locId, funnelId) {
+  const tok = getToken(locId);
+  if (!tok) return;
+
+  const nameEl = document.getElementById('fs-name-' + funnelId);
+  const headEl = document.getElementById('fs-head-' + funnelId);
+  const bodyEl = document.getElementById('fs-body-' + funnelId);
+  const saveBtn = document.getElementById('fs-save-' + funnelId);
+  const statusEl = document.getElementById('fs-status-' + funnelId);
+
+  if (!nameEl || !headEl || !bodyEl) return;
+
+  saveBtn.innerHTML = '<span class="spinner"></span> Saving...';
+  saveBtn.disabled = true;
+
+  const body = {
+    name: nameEl.value.trim(),
+    headCode: headEl.value,
+    bodyCode: bodyEl.value,
+  };
+
+  // Try multiple endpoints and methods
+  const toTry = [
+    ['PUT',   '/funnels/funnel/' + funnelId, body],
+    ['PATCH', '/funnels/funnel/' + funnelId, body],
+    ['PUT',   '/funnels/' + funnelId, { ...body, locationId: locId }],
+    ['PATCH', '/funnels/' + funnelId, { ...body, locationId: locId }],
+    ['PUT',   '/funnels/funnel/' + funnelId, { ...body, locationId: locId }],
+  ];
+
+  let saved = false;
+  let lastErr = '';
+
+  for (const [method, ep, bd] of toTry) {
+    try {
+      await apiFetch(tok, method, ep, bd);
+      saved = true;
+      break;
+    } catch(e) {
+      lastErr = e.message;
+      if (!e.message.includes('404') && !e.message.includes('405')) break;
+    }
+  }
+
+  if (saved) {
+    saveBtn.innerHTML = '✓ Saved';
+    saveBtn.style.background = 'var(--success)';
+    statusEl.textContent = '';
+    showToast('✓ Funnel settings saved');
+    setTimeout(() => {
+      saveBtn.innerHTML = 'Save Settings';
+      saveBtn.style.background = '';
+      saveBtn.disabled = false;
+    }, 2000);
+  } else {
+    saveBtn.innerHTML = 'Save Settings';
+    saveBtn.disabled = false;
+    statusEl.style.color = 'var(--error)';
+    statusEl.textContent = lastErr.slice(0, 80);
+    showToast('Error: ' + lastErr.slice(0, 80));
+  }
+}
+
+
+async function scanAllPages(locId, funnelId, btn) {
+  const scanEl = document.getElementById('scan-status-' + funnelId);
+  if (!scanEl) return;
+
+  if (scanEl.style.display !== 'none') {
+    scanEl.style.display = 'none';
+    btn.textContent = 'Scan All';
+    return;
+  }
+
+  btn.textContent = '...';
+  btn.disabled = true;
+  scanEl.style.display = 'block';
+  scanEl.innerHTML = '<div style="padding:10px 16px;font-size:12px;"><span class="spinner"></span> Loading funnel...</div>';
+
+  try {
+    const tok = getToken(locId);
+    const fd = await apiFetch(tok, 'GET', '/funnels/funnel/list?locationId=' + locId + '&limit=100');
+    const funnels = fd.funnels || fd.data || fd.list || fd.items || [];
+    const funnel = funnels.find(f => (f.id||f._id) === funnelId);
+    if (!funnel) { scanEl.innerHTML = '<div style="padding:10px;color:var(--error);">Funnel not found</div>'; return; }
+
+    const steps = funnel.steps || [];
+    const domain = getDomain(locId) || '';
+    const expectedPixel = getPixelForDomain(domain);
+    const results = [];
+
+    scanEl.innerHTML = '<div style="padding:10px 16px;font-size:12px;"><span class="spinner"></span> Scanning ' + steps.length + ' pages...</div>';
+
+    for (let si = 0; si < steps.length; si++) {
+      const step = steps[si];
+      const stepName = step.name || step.title || 'Page ' + (si+1);
+      const slug = (step.slug || step.path || '').replace(/^\//, '');
+      const fullUrl = domain && slug ? 'https://' + domain.replace(/^https?:\/\//, '') + '/' + slug : '';
+
+      let hasPixel = false, hasUTM = false, pixelId = '', status = 'no_url', errorMsg = '', hasFooterScript = false, headSnippet = '', foundAcuityField = '';
+
+      if (fullUrl) {
+        scanEl.innerHTML = '<div style="padding:10px 16px;font-size:12px;"><span class="spinner"></span> Scanning page ' + (si+1) + '/' + steps.length + ': ' + esc(stepName) + '</div>';
+        // Try direct fetch first, then proxies
+        const urlsToTry = [
+          fullUrl,
+          'https://corsproxy.io/?' + encodeURIComponent(fullUrl),
+          'https://api.allorigins.win/raw?url=' + encodeURIComponent(fullUrl),
+        ];
+        for (const tryUrl of urlsToTry) {
+          try {
+            const resp = await fetch(tryUrl, { cache: 'no-store' });
+            if (!resp.ok) { status = 'error'; errorMsg = 'HTTP ' + resp.status; continue; }
+            const html = await resp.text();
+            if (!html || html.length < 200) continue;
+            hasPixel = html.includes('fbq(') || html.includes('fbevents.js') || html.includes('Meta Pixel');
+            hasUTM = html.includes('user_ip_address') || html.includes('fbclid');
+            // FB Pixel
+            hasPixel = html.includes('fbq(') || html.includes('fbevents.js') || html.includes('Meta Pixel');
+            const pm = html.match(/fbq\('init',\s*['"]?(\d+)['"]?\)/);
+            pixelId = pm ? pm[1] : '';
+
+            // UTM Script
+            hasUTM = html.includes('user_ip_address') || html.includes('fbclid');
+
+            // Footer/Body: Marketing Data Tracker + Acuity Field
+            hasFooterScript = html.includes('MARKETING DATA TRACKER') || html.includes('acuityscheduling.com');
+            const acuityMatch = html.match(/ACUITY_FIELD_ID\s*=\s*['"]([^'"]+)['"]/);
+            foundAcuityField = acuityMatch ? acuityMatch[1] : '';
+
+            // Head snippet (scripts only)
+            const hm = html.match(/<head[^>]*>([\s\S]*?)<\/head>/i);
+            const headRaw = hm ? hm[1] : '';
+            // Extract script tags content
+            const scriptTags = [];
+            let sm; const scriptRe = /<script[^>]*>([\s\S]*?)<\/script>/gi;
+            while ((sm = scriptRe.exec(headRaw)) !== null) {
+              const sc = sm[1].trim();
+              if (sc.length > 10) scriptTags.push(sc.slice(0,150));
+            }
+            headSnippet = scriptTags.join('\n---\n').slice(0,500);
+            status = 'ok';
+            break;
+          } catch(e) {
+            status = 'cors';
+            errorMsg = e.message;
+          }
+        }
+        await sleep(400);
+      }
+
+      results.push({ stepName, fullUrl, hasPixel, hasUTM, pixelId, status, errorMsg, hasFooterScript, headSnippet, foundAcuityField });
+    }
+
+    // Build results
+    const withPixel = results.filter(r => r.hasPixel).length;
+    const withUTM = results.filter(r => r.hasUTM).length;
+    const scanned = results.filter(r => r.status === 'ok').length;
+    const blocked = results.filter(r => r.status === 'cors' || r.status === 'error').length;
+
+    const knownPixels = {
+      '1180664739949233': 'First Touch Beauty',
+      '540031443835405': 'No Needle Needed',
+      '819221296693583': 'Adv Beauty Treatments'
+    };
+
+    let html = `<div style="padding:8px 16px;background:var(--surface2);border-bottom:1px solid var(--border);display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+      <span style="font-size:12px;font-weight:700;">Results</span>
+      ${scanned > 0 ? '<span style="background:var(--success);color:#fff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:50px;">'+withPixel+'/'+scanned+' pixel</span>' : ''}
+      ${scanned > 0 ? '<span style="background:#1877F2;color:#fff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:50px;">'+withUTM+'/'+scanned+' UTM</span>' : ''}
+      ${blocked > 0 ? '<span style="background:var(--warning);color:#fff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:50px;">'+blocked+' blocked</span>' : ''}
+    </div>`;
+
+    const expectedAcuityField = getAcuityField(locId);
+    let si = 0;
+    results.forEach(r => {
+      const wrongPixel = r.pixelId && expectedPixel && r.pixelId !== expectedPixel.pixel;
+      const brand = knownPixels[r.pixelId] || '';
+
+      const rowId = 'scanrow-' + funnelId + '-' + si;
+      html += `<div style="padding:7px 16px;border-bottom:1px solid var(--border);font-size:11px;">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span style="color:${r.status==='ok'?(r.hasPixel?'var(--success)':'var(--error)'):'var(--text3)'};font-weight:700;font-size:13px;flex-shrink:0;">
+            ${r.status==='ok' ? (r.hasPixel?'✓':'✗') : '?'}
+          </span>
+          <div style="flex:1;min-width:0;">
+            <div style="font-weight:600;margin-bottom:3px;">${esc(r.stepName)}</div>
+            ${r.status === 'ok' ? `
+              <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:3px;">
+                ${r.hasPixel
+                  ? '<span style="background:rgba(24,119,242,0.1);color:#1877F2;padding:1px 7px;border-radius:50px;font-size:10px;">Pixel: '+r.pixelId+(brand?' ('+brand+')':'')+'</span>'
+                  : '<span style="background:rgba(255,59,92,0.1);color:var(--error);padding:1px 7px;border-radius:50px;font-size:10px;">No FB Pixel</span>'}
+                ${r.hasUTM
+                  ? '<span style="background:rgba(0,201,122,0.1);color:var(--success);padding:1px 7px;border-radius:50px;font-size:10px;">✓ UTM Script</span>'
+                  : '<span style="background:rgba(255,59,92,0.1);color:var(--error);padding:1px 7px;border-radius:50px;font-size:10px;">No UTM Script</span>'}
+                ${r.hasFooterScript
+                  ? `<span style="background:rgba(0,201,122,0.1);color:var(--success);padding:1px 7px;border-radius:50px;font-size:10px;">✓ Footer Script</span>
+                     ${r.foundAcuityField
+                       ? '<span style="background:rgba(24,119,242,0.1);color:#1877F2;padding:1px 7px;border-radius:50px;font-size:10px;">Acuity: '+esc(r.foundAcuityField)+'</span>'
+                       : ''}
+                     ${r.foundAcuityField && expectedAcuityField && r.foundAcuityField === expectedAcuityField
+                       ? '<span style="background:rgba(0,201,122,0.1);color:var(--success);padding:1px 7px;border-radius:50px;font-size:10px;">✓ Acuity Match</span>'
+                       : r.foundAcuityField && expectedAcuityField
+                         ? '<span style="background:rgba(255,170,0,0.1);color:var(--warning);padding:1px 7px;border-radius:50px;font-size:10px;">⚠ Acuity mismatch! Expected '+esc(expectedAcuityField)+'</span>'
+                         : ''}`
+                  : '<span style="background:rgba(255,59,92,0.1);color:var(--error);padding:1px 7px;border-radius:50px;font-size:10px;">✗ No Footer Script</span>'}
+                ${wrongPixel ? '<span style="background:rgba(255,170,0,0.1);color:var(--warning);padding:1px 7px;border-radius:50px;font-size:10px;">⚠ Wrong pixel!</span>' : ''}
+              </div>
+              <button onclick="toggleScanDetail('${rowId}')" style="background:none;border:1px solid var(--border2);color:var(--text3);font-size:10px;padding:1px 7px;border-radius:50px;cursor:pointer;font-family:var(--font);">View code details</button>
+              <div id="${rowId}" style="display:none;margin-top:6px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px;font-size:11px;line-height:1.6;color:var(--text2);">
+                <div style="font-weight:700;margin-bottom:4px;font-size:10px;text-transform:uppercase;color:var(--text3);">Head Scripts Found:</div>
+                <pre style="font-family:monospace;font-size:10px;white-space:pre-wrap;max-height:100px;overflow-y:auto;margin:0;">${esc(r.headSnippet||'(empty or could not read)')}</pre>
+                ${r.foundAcuityField ? '<div style="margin-top:6px;font-size:10px;"><strong>Acuity Field in page:</strong> '+esc(r.foundAcuityField)+'</div>' : ''}
+                ${r.foundAcuityField && expectedAcuityField ? '<div style="font-size:10px;color:'+(r.foundAcuityField===expectedAcuityField?'var(--success)':'var(--warning)')+'"><strong>Expected for this spa:</strong> '+esc(expectedAcuityField)+(r.foundAcuityField===expectedAcuityField?' ✓ Match':' ⚠ Mismatch')+'</div>' : ''}
+              </div>`
+            : `<span style="color:var(--text3);font-size:10px;">${r.status==='cors'?'CORS blocked':r.errorMsg||'No URL'}</span>`}
+          </div>
+          ${r.fullUrl ? '<a href="'+esc(r.fullUrl)+'" target="_blank" style="font-size:10px;color:var(--accent);flex-shrink:0;">↗</a>' : ''}
+        </div>
+      </div>`;
+      si++;
+    });
+
+    scanEl.innerHTML = html;
+  } catch(e) {
+    scanEl.innerHTML = '<div style="padding:10px 16px;font-size:12px;color:var(--error);">Error: ' + esc(e.message) + '</div>';
+  } finally {
+    btn.textContent = 'Scan All';
+    btn.disabled = false;
+  }
+}
+
+
+async function scanFunnelTracking(locId, funnelId, btn) {
+  const tok = getToken(locId);
+  if (!tok) { showToast('No token'); return; }
+  const statusEl = document.getElementById('scan-status-' + funnelId);
+  if (!statusEl) return;
+
+  if (statusEl.style.display !== 'none') {
+    statusEl.style.display = 'none';
+    btn.textContent = 'Scan';
+    return;
+  }
+
+  btn.textContent = '...';
+  btn.disabled = true;
+  statusEl.style.display = 'block';
+  statusEl.innerHTML = '<div style="padding:10px 16px;font-size:12px;color:var(--text2);"><span class="spinner"></span> Scanning pages...</div>';
+
+  try {
+    const fd = await apiFetch(tok, 'GET', '/funnels/funnel/list?locationId=' + locId + '&limit=100');
+    const funnels = fd.funnels || fd.data || fd.list || fd.items || [];
+    const funnel = funnels.find(f => (f.id||f._id) === funnelId);
+    if (!funnel) { statusEl.innerHTML = '<div style="padding:10px;color:var(--error);">Funnel not found</div>'; return; }
+
+    const steps = funnel.steps || [];
+    const domain = getDomain(locId) || '';
+    const expectedPixel = getPixelForDomain(domain);
+    const results = [];
+
+    // Helper: fetch page HTML via CORS proxy
+    async function fetchPageHead(url) {
+      const proxies = [
+        `https://corsproxy.io/?${encodeURIComponent(url)}`,
+        `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+        `https://thingproxy.freeboard.io/fetch/${url}`,
+        `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
+      ];
+      for (const proxyUrl of proxies) {
+        try {
+          const resp = await fetch(proxyUrl, { cache: 'no-store' });
+          if (!resp.ok) continue;
+          const html = await resp.text();
+          if (html && html.length > 100) return html;
+        } catch(e) { /* try next proxy */ }
+      }
+      return null;
+    }
+
+    for (const step of steps) {
+      const stepName = step.name || step.title || 'Unnamed';
+      const slug = (step.slug || step.path || '').replace(/^\//, '');
+      const fullUrl = domain && slug ? 'https://' + domain.replace(/^https?:\/\//, '') + '/' + slug : '';
+
+      let hasPixel = false, hasUTM = false, pixelFound = '', fetchOk = false;
+      let headContent = '', bodyContent = '';
+
+      if (fullUrl) {
+        const html = await fetchPageHead(fullUrl);
+        if (html) {
+          fetchOk = true;
+          const headMatch = html.match(/<head[^>]*>([\s\S]*?)<\/head>/i);
+          headContent = headMatch ? headMatch[1] : '';
+          const bodyMatch = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+          bodyContent = bodyMatch ? bodyMatch[1] : '';
+
+          // Check head for pixel
+          hasPixel = headContent.includes('fbq(') || headContent.includes('fbevents') || headContent.includes('Meta Pixel');
+          // Check body/footer too
+          const hasPixelBody = bodyContent.includes('fbq(') || bodyContent.includes('fbevents');
+          hasUTM = headContent.includes('user_ip_address') || headContent.includes('fbclid') ||
+                   bodyContent.includes('user_ip_address');
+
+          const pixelMatch = (headContent + bodyContent).match(/fbq\('init',\s*['"](\d+)['"]\)/);
+          pixelFound = pixelMatch ? pixelMatch[1] : '';
+        }
+        await sleep(400);
+      }
+
+      results.push({ stepName, fullUrl, hasPixel, hasUTM, pixelFound, fetchOk, headContent, bodyContent });
+    }
+
+    const withPixel = results.filter(r => r.hasPixel).length;
+    const withUTM = results.filter(r => r.hasUTM).length;
+    const fetched = results.filter(r => r.fetchOk).length;
+    const notFetched = results.filter(r => !r.fetchOk).length;
+
+    let html = `<div style="padding:8px 16px;background:var(--surface2);display:flex;gap:8px;flex-wrap:wrap;align-items:center;border-bottom:1px solid var(--border);">
+      <span style="font-size:12px;font-weight:700;">Scan Results</span>
+      ${fetched > 0 ? `
+        <span style="background:var(--success);color:#fff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:50px;">✓ ${withPixel} with pixel</span>
+        ${withPixel < fetched ? '<span style="background:var(--error);color:#fff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:50px;">✗ '+(fetched-withPixel)+' missing</span>' : ''}
+        ${withUTM > 0 ? '<span style="background:#1877F2;color:#fff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:50px;">'+withUTM+' UTM</span>' : ''}
+      ` : ''}
+      ${notFetched > 0 ? '<span style="background:var(--warning);color:#fff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:50px;">'+notFetched+' not scanned</span>' : ''}
+    </div>`;
+
+    results.forEach(r => {
+      if (!r.fetchOk) {
+        html += `<div style="display:flex;align-items:center;gap:8px;padding:7px 16px;border-bottom:1px solid var(--border);font-size:12px;">
+          <span style="color:var(--warning);font-size:14px;flex-shrink:0;">?</span>
+          <div style="flex:1;">
+            <div style="font-weight:600;">${esc(r.stepName)}</div>
+            <div style="font-size:10px;color:var(--text3);">Could not scan — CORS blocked</div>
+          </div>
+          ${r.fullUrl ? `<a href="${esc(r.fullUrl)}" target="_blank" style="font-size:10px;color:var(--accent);flex-shrink:0;">Open ↗</a>` : ''}
+        </div>`;
+        return;
+      }
+
+      const wrongPixel = r.pixelFound && expectedPixel && r.pixelFound !== expectedPixel.pixel;
+      const color = r.hasPixel ? 'var(--success)' : 'var(--error)';
+      const icon = r.hasPixel ? '✓' : '✗';
+
+      html += `<div style="display:flex;align-items:center;gap:8px;padding:7px 16px;border-bottom:1px solid var(--border);font-size:12px;">
+        <span style="color:${color};font-weight:700;font-size:14px;flex-shrink:0;">${icon}</span>
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:600;">${esc(r.stepName)}</div>
+          <div style="font-size:10px;display:flex;gap:8px;flex-wrap:wrap;margin-top:2px;">
+            ${r.pixelFound ? '<span style="color:#1877F2;">Pixel: '+r.pixelFound+'</span>' : '<span style="color:var(--error);">No pixel in head</span>'}
+            ${r.hasUTM ? '<span style="color:var(--success);">✓ UTM Script</span>' : '<span style="color:var(--text3);">No UTM</span>'}
+            ${wrongPixel ? '<span style="color:var(--warning);">⚠ Wrong pixel! Expected '+expectedPixel.pixel+'</span>' : ''}
+          </div>
+        </div>
+        ${r.fullUrl ? `<a href="${esc(r.fullUrl)}" target="_blank" style="font-size:10px;color:var(--accent);flex-shrink:0;">Open ↗</a>` : ''}
+      </div>`;
+    });
+
+    statusEl.innerHTML = html;
+  } catch(e) {
+    statusEl.innerHTML = '<div style="padding:10px 16px;font-size:12px;color:var(--error);">Error: ' + esc(e.message) + '</div>';
+  } finally {
+    btn.textContent = 'Scan';
+    btn.disabled = false;
+  }
+}
+
+
+async function injectPixelToFunnelBtn(btn) {
+  const locId = btn.dataset.locid;
+  const funnelId = btn.dataset.fid;
+  // Get current head from funnel
+  const tok = getToken(locId);
+  if (!tok) return;
+  try {
+    const fd = await apiFetch(tok, 'GET', '/funnels/funnel/list?locationId=' + locId + '&limit=100');
+    const funnels = fd.funnels || fd.data || fd.list || fd.items || [];
+    const funnel = funnels.find(f => (f.id||f._id) === funnelId);
+    const currentHead = funnel ? (funnel.headCode || funnel.headerCode || '') : '';
+    await injectPixelToFunnel(locId, funnelId, currentHead, btn);
+  } catch(e) {
+    showToast('Error: ' + e.message.slice(0,60));
+  }
+}
+
+async function injectPixelToFunnel(locId, funnelId, currentHead, btn) {
+  const tok = getToken(locId);
+  if (!tok) return;
+  const orig = btn.textContent;
+  btn.textContent = '...';
+  btn.disabled = true;
+
+  const domain = getDomain(locId) || '';
+  const pixel = getPixelForDomain(domain);
+  if (!pixel) {
+    showToast('No pixel defined for domain: ' + domain);
+    btn.textContent = orig;
+    btn.disabled = false;
+    return;
+  }
+
+  if (currentHead.includes(pixel.pixel)) {
+    showToast('Pixel already exists in this funnel');
+    btn.textContent = orig;
+    btn.disabled = false;
+    return;
+  }
+
+  // Get funnel name first
+  let funnelName = '';
+  try {
+    const fd = await apiFetch(tok, 'GET', '/funnels/funnel/list?locationId=' + locId + '&limit=100');
+    const funnels = fd.funnels || fd.data || fd.list || fd.items || [];
+    const funnel = funnels.find(f => (f.id||f._id) === funnelId);
+    funnelName = funnel ? (funnel.name||funnel.title||'') : '';
+  } catch(e) {}
+
+  const newHead = (currentHead ? currentHead + '\n' : '') + pixel.code;
+
+  let saved = false;
+  const toTry = [
+    ['PUT',   '/funnels/funnel/' + funnelId, { name: funnelName, headCode: newHead, locationId: locId }],
+    ['PATCH', '/funnels/funnel/' + funnelId, { headCode: newHead, locationId: locId }],
+    ['PUT',   '/funnels/' + funnelId,         { headCode: newHead, locationId: locId }],
+    ['PATCH', '/funnels/' + funnelId,         { headCode: newHead, locationId: locId }],
+  ];
+
+  for (const [method, ep, body] of toTry) {
+    try {
+      await apiFetch(tok, method, ep, body);
+      saved = true;
+      break;
+    } catch(e) {
+      if (!e.message.includes('404') && !e.message.includes('405')) break;
+    }
+  }
+
+  if (saved) {
+    btn.textContent = '✓ Done';
+    btn.style.color = 'var(--success)';
+    btn.style.borderColor = 'var(--success)';
+    showToast('✓ Pixel ' + pixel.pixel + ' injected in funnel');
+  } else {
+    btn.textContent = orig;
+    btn.disabled = false;
+    showToast('GHL API does not allow writing funnel head code with pit- tokens');
+  }
+}
+
+async function injectPageTracking(locId, pageId, pageName, btn) {
+  const tok = getToken(locId);
+  if (!tok) return;
+  const orig = btn.textContent;
+  btn.textContent = '...';
+  btn.disabled = true;
+
+  try {
+    // Get current head code
+    let headCode = '';
+    try {
+      const pg = await apiFetch(tok, 'GET', '/funnels/funnel/page/' + pageId + '?locationId=' + locId);
+      headCode = (pg.page||pg).headCode || (pg.page||pg).headerCode || '';
+    } catch(e) {}
+
+    if (headCode.includes('user_ip_address')) {
+      showToast('Script already exists in ' + pageName);
+      return;
+    }
+
+    const scriptTag = '<scr'+'ipt>\n' + TRACKING_SCRIPT + '\n</'+'script>';
+    const newHead = headCode + '\n' + scriptTag;
+
+    // Try all endpoints
+    let ok = false;
+    const endpoints = [
+      ['PATCH', '/funnels/funnel/page/' + pageId, { locationId: locId, headCode: newHead }],
+      ['PUT',   '/funnels/funnel/page/' + pageId, { locationId: locId, headCode: newHead }],
+      ['PATCH', '/funnels/funnel/page/' + pageId, { headCode: newHead }],
+      ['PUT',   '/funnels/funnel/page/' + pageId, { headCode: newHead }],
+    ];
+
+    for (const [method, ep, body] of endpoints) {
+      try {
+        await apiFetch(tok, method, ep, body);
+        ok = true;
+        break;
+      } catch(e) {
+        if (!e.message.includes('404') && !e.message.includes('405')) {
+          // Non-404 error - show it
+          showToast('Error: ' + e.message.slice(0,80));
+          break;
+        }
+      }
+    }
+
+    if (ok) {
+      btn.textContent = '✓ Done';
+      btn.style.color = 'var(--success)';
+      btn.style.borderColor = 'var(--success)';
+      showToast('✓ Script injected in ' + pageName);
+    } else {
+      btn.textContent = orig;
+      btn.disabled = false;
+    }
+  } catch(e) {
+    showToast('Error: ' + e.message.slice(0,80));
+    btn.textContent = orig;
+    btn.disabled = false;
+  }
+}
+
+
+function showBookmarklet() {
+  let modal = document.getElementById('bookmarkletModal');
+  if (modal) { modal.style.display = 'flex'; return; }
+  
+  modal = document.createElement('div');
+  modal.id = 'bookmarkletModal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:9999;';
+  
+  const bookmarkletUrl = `javascript:(function(){var head=document.head.innerHTML;var body=document.body.innerHTML;var full=head+body;var hasPixel=full.includes('fbq(')||full.includes('fbevents')||full.includes('Meta Pixel');var hasUTM=full.includes('user_ip_address')||full.includes('fbclid');var pixelMatch=full.match(/fbq\\('init',\\s*['"]?(\\d+)['"]?\\)/);var pixelId=pixelMatch?pixelMatch[1]:'';var knownPixels={'1180664739949233':'First Touch Beauty','540031443835405':'No Needle Needed','819221296693583':'Adv Beauty Treatments'};var brand=pixelId?(knownPixels[pixelId]||'Unknown'):'';var msg='=== GHL PAGE SCAN ===\\n'+'Page: '+document.title+'\\n\\n'+'FB PIXEL: '+(hasPixel?'YES - '+pixelId+' ('+brand+')':'MISSING')+'\\n'+'UTM SCRIPT: '+(hasUTM?'YES':'MISSING')+'\\n'+((!hasPixel||!hasUTM)?'\\n MISSING TRACKING!':'\\n All tracking present');alert(msg);})();`;
+
+  modal.innerHTML = `<div style="background:var(--surface);border-radius:16px;padding:28px;max-width:480px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.3);">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+      <h3 style="font-size:16px;font-weight:700;margin:0;">Page Scanner Bookmarklet</h3>
+      <button onclick="document.getElementById('bookmarkletModal').style.display='none'" 
+        style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text3);">✕</button>
+    </div>
+    <p style="font-size:13px;color:var(--text2);margin-bottom:16px;">
+      Drag the button below to your browser bookmarks bar. Then open any GHL funnel page and click the bookmark to instantly see if it has the FB Pixel and UTM script.
+    </p>
+    <div style="background:var(--surface2);border:2px dashed var(--accent);border-radius:12px;padding:20px;text-align:center;margin-bottom:16px;">
+      <a href="${bookmarkletUrl}" 
+        style="background:var(--accent);color:#fff;padding:10px 24px;border-radius:50px;font-weight:700;font-size:14px;text-decoration:none;display:inline-block;">
+        🔍 Scan Page Tracking
+      </a>
+      <p style="font-size:11px;color:var(--text3);margin-top:10px;">← Drag this to your bookmarks bar</p>
+    </div>
+    <div style="font-size:12px;color:var(--text2);">
+      <strong>How to use:</strong>
+      <ol style="margin:8px 0;padding-left:18px;line-height:2;">
+        <li>Drag the button above to your browser bookmarks bar</li>
+        <li>Open any funnel page in GHL</li>
+        <li>Click the bookmark</li>
+        <li>See instantly: FB Pixel ✓/✗, Pixel ID, UTM Script ✓/✗</li>
+      </ol>
+    </div>
+  </div>`;
+  
+  modal.addEventListener('click', e => { if (e.target === modal) modal.style.display = 'none'; });
+  document.body.appendChild(modal);
+}
+
+
+async function scanPageInFrame(url, btn) {
+  const pageRow = btn.closest('.sf-page');
+  let resultEl = pageRow ? pageRow.nextElementSibling : null;
+  
+  if (resultEl && resultEl.style.display !== 'none') {
+    resultEl.style.display = 'none';
+    btn.textContent = 'Scan';
+    return;
+  }
+
+  if (resultEl) {
+    resultEl.style.display = 'block';
+    resultEl.innerHTML = '<span class="spinner"></span> Fetching page...';
+  }
+
+  btn.textContent = '...';
+  btn.disabled = true;
+
+  try {
+    const resp = await fetch(url, {
+      method: 'GET',
+      cache: 'no-store',
+      credentials: 'omit'
+    });
+
+    if (!resp.ok) {
+      if (resultEl) resultEl.innerHTML = '<span style="color:var(--error);">HTTP ' + resp.status + ' — cannot read page</span>';
+      return;
+    }
+
+    const html = await resp.text();
+
+    // Check for pixel and UTM
+    const hasPixel = html.includes('fbq(') || html.includes('fbevents.js') || html.includes('Meta Pixel');
+    const hasUTM = html.includes('user_ip_address') || html.includes('fbclid');
+    const pixelMatch = html.match(/fbq\('init',\s*['"]?(\d+)['"]?\)/);
+    const pixelId = pixelMatch ? pixelMatch[1] : '';
+    const knownPixels = {
+      '1180664739949233': 'First Touch Beauty',
+      '540031443835405': 'No Needle Needed',
+      '819221296693583': 'Adv Beauty Treatments'
+    };
+    const brand = knownPixels[pixelId] || '';
+
+    if (resultEl) {
+      resultEl.innerHTML = `
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+          <span style="font-weight:700;color:${hasPixel?'var(--success)':'var(--error)'};">
+            ${hasPixel ? '✓ FB Pixel' : '✗ No FB Pixel'}
+          </span>
+          ${pixelId ? '<span style="font-size:11px;background:rgba(24,119,242,0.1);color:#1877F2;padding:2px 8px;border-radius:50px;">' + pixelId + (brand?' — '+brand:'') + '</span>' : ''}
+          <span style="font-weight:700;color:${hasUTM?'var(--success)':'var(--error)'};">
+            ${hasUTM ? '✓ UTM Script' : '✗ No UTM Script'}
+          </span>
+        </div>`;
+    }
+  } catch(e) {
+    if (resultEl) resultEl.innerHTML = '<span style="color:var(--error);">Error: ' + esc(e.message) + '</span>';
+  } finally {
+    btn.textContent = 'Scan';
+    btn.disabled = false;
+  }
+}
+
+
+function toggleScanDetail(id) {
+  const el = document.getElementById(id);
+  if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+function copyTrackingScript(btn) {
+  const script = '<script>\n' + TRACKING_SCRIPT + '\n<\/script>';
+  navigator.clipboard.writeText(script).then(() => {
+    const orig = btn.textContent;
+    btn.textContent = 'Copied!';
+    btn.style.borderColor = 'var(--success)';
+    btn.style.color = 'var(--success)';
+    setTimeout(() => {
+      btn.textContent = orig;
+      btn.style.borderColor = '';
+      btn.style.color = '';
+    }, 2000);
+    showToast('Script copied! Paste it in the funnel Head Tracking Code in GHL settings.');
+  }).catch(() => {
+    // Fallback
+    const ta = document.createElement('textarea');
+    ta.value = script;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    showToast('Script copied! Paste it in the funnel Head Tracking Code.');
+  });
+}
+
+async function injectIntoFunnel(locId, funnelId, btn) {
+  const tok = getToken(locId);
+  if (!tok) { showToast('No token for this account'); return; }
+  const statusEl = document.getElementById('inject-status-' + funnelId);
+
+  const origText = btn.textContent;
+  btn.textContent = '...';
+  btn.disabled = true;
+
+  try {
+    // Get funnel details to find form page steps
+    const fd = await apiFetch(tok, 'GET', '/funnels/funnel/list?locationId=' + locId + '&limit=100');
+    const funnels = fd.funnels || fd.data || fd.list || fd.items || [];
+    const funnel = funnels.find(f => (f.id||f._id) === funnelId);
+
+    if (!funnel) { showToast('Funnel not found'); return; }
+
+    const steps = funnel.steps || [];
+    const formSteps = steps.filter(s => (s.name||s.title||'').toLowerCase().includes('form'));
+
+    if (!formSteps.length) {
+      if (statusEl) { statusEl.style.display='block'; statusEl.textContent='No form pages found in this funnel.'; statusEl.style.background='rgba(255,170,0,0.08)'; }
+      showToast('No form pages found in this funnel');
+      return;
+    }
+
+    let ok = 0, skip = 0, err = 0;
+    const logs = [];
+
+    const funnelIdForStep = funnelId;
+    for (const step of formSteps) {
+      const pageId = step.id || step._id || step.pageId;
+      if (!pageId) continue;
+      try {
+        // Get current page head code
+        let existingHead = '';
+        try {
+          const pg = await apiFetch(tok, 'GET', '/funnels/funnel/page/' + pageId + '?locationId=' + locId);
+          existingHead = (pg.page || pg).headCode || (pg.page || pg).headerCode || '';
+        } catch(e) { /* page detail optional */ }
+
+        if (existingHead.includes('user_ip_address')) {
+          skip++;
+          logs.push('⏭ ' + esc(step.name || pageId) + ' — already injected');
+          continue;
+        }
+
+        const scriptTag = '<scr' + 'ipt>' + TRACKING_SCRIPT + '</' + 'script>';
+        const newHead = existingHead + '\n' + scriptTag;
+
+        // Try all known GHL endpoints and methods for updating funnel page head code
+        let updated = false;
+        const toTry = [
+          ['PUT',   '/funnels/funnel/page/' + pageId, { locationId: locId, headCode: newHead }],
+          ['PATCH', '/funnels/funnel/page/' + pageId, { locationId: locId, headCode: newHead }],
+          ['PUT',   '/funnels/funnel/page/' + pageId, { locationId: locId, head_code: newHead }],
+          ['PUT',   '/funnels/funnel/page/' + pageId, { locationId: locId, headerCode: newHead }],
+          ['PATCH', '/funnels/funnel/page/' + pageId, { locationId: locId, headerCode: newHead }],
+          ['PUT',   '/funnels/' + funnelIdForStep + '/page/' + pageId, { locationId: locId, headCode: newHead }],
+          ['PATCH', '/funnels/' + funnelIdForStep + '/page/' + pageId, { locationId: locId, headCode: newHead }],
+        ];
+        for (const [method, ep, body] of toTry) {
+          try {
+            await apiFetch(tok, method, ep, body);
+            updated = true;
+            break;
+          } catch(e2) {
+            if (!e2.message.includes('404') && !e2.message.includes('405')) throw e2;
+          }
+        }
+        if (!updated) throw new Error('GHL API does not expose funnel page head code update. Add script manually in funnel settings.');
+        ok++;
+        logs.push('✓ ' + esc(step.name || pageId));
+      } catch(e) {
+        err++;
+        logs.push('✕ ' + esc(step.name || pageId) + ': ' + e.message.slice(0,60));
+      }
+      await sleep(200);
+    }
+
+    const msg = ok + ' injected' + (skip ? ', ' + skip + ' skipped' : '') + (err ? ', ' + err + ' errors' : '');
+    if (statusEl) {
+      statusEl.style.display = 'block';
+      statusEl.style.background = err ? 'rgba(255,59,92,0.07)' : 'rgba(0,201,122,0.07)';
+      statusEl.innerHTML = '<strong>' + msg + '</strong><br>' + logs.join('<br>');
+    }
+    showToast(msg);
+  } catch(e) {
+    showToast('Error: ' + e.message.slice(0,60));
+  } finally {
+    btn.textContent = origText;
+    btn.disabled = false;
+  }
+}
+
+async function injectFormPageScript() {
+  const btn = document.getElementById('btnInjectScript');
+  const status = document.getElementById('injectStatus');
+  const toShow = [...selected].filter(id => getToken(id));
+  if (!toShow.length) { showToast('Select connected sub-accounts first'); return; }
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Injecting...';
+  status.style.display = 'block';
+  status.innerHTML = '<span class="spinner"></span> Loading funnels...';
+
+  let totalOk = 0, totalErr = 0, log = [];
+
+  for (const locId of toShow) {
+    const tok = getToken(locId);
+    const loc = allLocs.find(l => l.id === locId);
+    const locName = loc ? (loc.name || loc.businessName || locId) : locId;
+
+    try {
+      // Get all funnels
+      const fd = await apiFetch(tok, 'GET', '/funnels/funnel/list?locationId=' + locId + '&limit=100');
+      console.log('Funnels raw response keys:', Object.keys(fd), 'total:', fd.total, 'count:', fd.count);
+      const funnels = fd.funnels || fd.data || fd.list || fd.items || [];
+      console.log('Funnels found:', funnels.length);
+      if (funnels.length > 0) {
+        const f0 = funnels[0];
+        console.log('Funnel[0] keys:', Object.keys(f0));
+        console.log('Funnel[0] headCode:', f0.headCode || f0.headerCode || f0.head || 'EMPTY');
+        console.log('Funnel[0] bodyCode:', f0.bodyCode || f0.footerCode || f0.body || 'EMPTY');
+        console.log('Funnel[0] full sample:', JSON.stringify(f0).slice(0, 500));
+      }
+
+      for (const funnel of funnels) {
+        const steps = funnel.steps || [];
+        // Find steps with "form" in name
+        const formSteps = steps.filter(s => {
+          const n = (s.name || s.title || '').toLowerCase();
+          return n.includes('form');
+        });
+
+        for (const step of formSteps) {
+          const pageId = step.id || step._id || step.pageId;
+          if (!pageId) continue;
+          try {
+            // Get current page to check existing head code
+            const pg = await apiFetch(tok, 'GET', '/funnels/funnel/page/' + pageId + '?locationId=' + locId);
+            const page = pg.page || pg;
+            const existingHead = page.headCode || page.headerCode || page.head || '';
+
+            // Skip if already injected
+            if (existingHead.includes('user_ip_address')) {
+              log.push('⏭ ' + locName + ' · ' + esc(step.name || pageId) + ' — already injected');
+              continue;
+            }
+
+            // Inject script
+            const scriptTag = '<scr' + 'ipt>' + TRACKING_SCRIPT + '</' + 'script>';
+            const newHead = existingHead + '\n' + scriptTag;
+            await apiFetch(tok, 'PUT', '/funnels/funnel/page/' + pageId, {
+              locationId: locId,
+              headCode: newHead
+            });
+
+            totalOk++;
+            log.push('✓ ' + locName + ' · ' + esc(step.name || pageId));
+          } catch(e) {
+            totalErr++;
+            log.push('✕ ' + locName + ' · ' + esc(step.name || pageId) + ': ' + e.message);
+          }
+          await sleep(200);
+        }
+      }
+    } catch(e) {
+      log.push('✕ ' + locName + ': ' + e.message);
+    }
+  }
+
+  btn.innerHTML = 'Inject Script to Form Pages';
+  btn.disabled = false;
+
+  const color = totalErr > 0 ? 'var(--warning)' : 'var(--success)';
+  status.innerHTML = '<div style="font-weight:700;color:' + color + ';margin-bottom:8px;">Done — ' + totalOk + ' injected, ' + totalErr + ' errors</div>' +
+    '<div style="font-size:11px;color:var(--text2);line-height:1.8;">' + log.join('<br>') + '</div>';
+}
+
+
+// ── DASHBOARD ─────────────────────────────────────────────────
+async function loadDashboard() {
+  const el = document.getElementById('dashContent');
+  const ids = [...selected].filter(id => getToken(id));
+  if (!ids.length) {
+    el.innerHTML = '<div class="empty">Select connected sub-accounts in Accounts tab first.</div>';
+    return;
+  }
+  const days = parseInt(document.getElementById('dashPeriod').value || '30');
+  const since = new Date(Date.now() - days * 86400000);
+  const sinceStr = since.toISOString();
+
+  el.innerHTML = '<div class="dash-loading"><span class="spinner"></span> Loading data for ' + ids.length + ' account(s)...</div>';
+
+  const cards = [];
+
+  for (const locId of ids) {
+    const tok = getToken(locId);
+    const l = allLocs.find(x => x.id === locId);
+    const name = l ? (l.name || l.businessName || locId) : locId;
+
+    let totalLeads = 0, fbLeads = 0, apptLeads = 0;
+    const campaigns = {};
+    const sources = {};
+
+    try {
+      // Load contacts using GHL date filter params
+      let contacts = [];
+      let totalFromApi = 0;
+      try {
+        // Use startDate/endDate params if available
+        const startDate = since.toISOString().split('T')[0];
+        const endDate = new Date().toISOString().split('T')[0];
+        
+        // Try with date filter first
+        let pageNum = 1;
+        while (true) {
+          const url = '/contacts/?locationId=' + locId + 
+            '&limit=100&sortBy=date_added&page=' + pageNum +
+            '&startDate=' + startDate + '&endDate=' + endDate;
+          const d = await apiFetch(tok, 'GET', url);
+          const batch = d.contacts || d.data || [];
+          totalFromApi = d.total || d.count || totalFromApi;
+          contacts = contacts.concat(batch);
+          if (batch.length < 100 || contacts.length >= 500) break;
+          pageNum++;
+          await sleep(100);
+        }
+        
+        // If date filter didn't work (returned too many), filter client-side
+        if (contacts.length > 0 && !contacts.every(c => (c.dateAdded||c.createdAt||'') >= sinceStr)) {
+          contacts = contacts.filter(c => (c.dateAdded||c.createdAt||'') >= sinceStr);
+        }
+      } catch(e) {
+        // Fallback without date filter
+        for (let p = 1; p <= 10; p++) {
+          try {
+            const d = await apiFetch(tok, 'GET', '/contacts/?locationId=' + locId + '&limit=100&sortBy=date_added&page=' + p);
+            const batch = d.contacts || d.data || [];
+            const recent = batch.filter(c => (c.dateAdded||c.createdAt||'') >= sinceStr);
+            contacts = contacts.concat(recent);
+            if (recent.length < batch.length || batch.length < 100) break;
+          } catch(e2) { break; }
+        }
+      }
+
+      totalLeads = contacts.length;
+      if (totalFromApi > contacts.length) totalLeads = totalFromApi; // use API total if available
+
+      contacts.forEach(c => {
+        const attr = c.attributionSource || {};
+        const src = (c.source || '').toLowerCase();
+        const isFB = src.includes('facebook') || src.includes('fb') ||
+                     (attr.utmSource||'').toLowerCase().includes('facebook') ||
+                     !!attr.fbclid;
+        if (isFB) fbLeads++;
+
+        // Campaign from custom fields
+        const cfDefs2 = window._cfDefs && window._cfDefs[locId] || {};
+        const allCF = c.customFields || [];
+        let campName = '';
+        allCF.forEach(f => {
+          const fname = (cfDefs2[f.id] || f.fieldKey || '').toLowerCase();
+          if ((fname.includes('campaign') || fname.includes('form name') || fname.includes('ad name')) && f.value) {
+            if (!campName) campName = f.value;
+          }
+        });
+        // Fallback to attribution
+        if (!campName) campName = attr.utmCampaign || attr.campaign || attr.utmContent || attr.adName || c.source || '';
+        if (campName) {
+          campaigns[campName] = (campaigns[campName] || 0) + 1;
+        }
+
+        // Source
+        const srcLabel = c.source || attr.utmSource || attr.medium || 'direct';
+        sources[srcLabel] = (sources[srcLabel] || 0) + 1;
+      });
+
+    } catch(e) { /* continue */ }
+
+    // Load custom field defs for this location
+    if (!window._cfDefs) window._cfDefs = {};
+    if (!window._cfDefs[locId]) {
+      try {
+        const cfd = await apiFetch(tok, 'GET', '/locations/' + locId + '/customFields');
+        const fields = cfd.customFields || cfd.data || [];
+        window._cfDefs[locId] = {};
+        fields.forEach(f => { if(f.id) window._cfDefs[locId][f.id] = f.name || f.fieldKey || ''; });
+      } catch(e) {}
+    }
+
+    // Sort campaigns by count
+    const topCampaigns = Object.entries(campaigns)
+      .sort((a,b) => b[1]-a[1])
+      .slice(0, 8);
+    const maxCamp = topCampaigns.length ? topCampaigns[0][1] : 1;
+
+    // Sort sources
+    const topSources = Object.entries(sources)
+      .sort((a,b) => b[1]-a[1])
+      .slice(0, 5);
+
+    cards.push({ name, locId, totalLeads, fbLeads, topCampaigns, topSources, maxCamp, days });
+    await sleep(100);
+  }
+
+  // Render
+  if (!cards.length) { el.innerHTML = '<div class="empty">No data loaded.</div>'; return; }
+
+  let html = '<div class="dash-grid">';
+  cards.forEach(card => {
+    const fbPct = card.totalLeads > 0 ? Math.round(card.fbLeads/card.totalLeads*100) : 0;
+    html += `<div class="dash-card">
+      <div class="dash-card-hdr">
+        <div class="dash-card-name">${esc(card.name)}</div>
+        <span style="font-size:10px;color:var(--text3);">Last ${card.days} days</span>
+      </div>
+      <div class="dash-stat-row">
+        <div class="dash-stat">
+          <div class="dash-stat-val accent">${card.totalLeads}</div>
+          <div class="dash-stat-lbl">Total Leads</div>
+        </div>
+        <div class="dash-stat">
+          <div class="dash-stat-val" style="color:#1877F2;">${card.fbLeads}</div>
+          <div class="dash-stat-lbl">FB Leads</div>
+        </div>
+        <div class="dash-stat">
+          <div class="dash-stat-val" style="color:#1877F2;">${fbPct}%</div>
+          <div class="dash-stat-lbl">FB Rate</div>
+        </div>
+      </div>`;
+
+    if (card.topCampaigns.length) {
+      html += `<div class="dash-section">
+        <div class="dash-section-title">Top Campaigns / Forms</div>`;
+      card.topCampaigns.forEach(([name, count]) => {
+        const pct = Math.round(count/card.maxCamp*100);
+        html += `<div class="dash-camp-row">
+          <div class="dash-camp-name" title="${esc(name)}">${esc(name.slice(0,45))}${name.length>45?'...':''}</div>
+          <div style="width:60px;background:var(--surface2);border-radius:99px;height:6px;overflow:hidden;flex-shrink:0;">
+            <div class="dash-camp-bar" style="width:${pct}%;"></div>
+          </div>
+          <div class="dash-camp-count">${count}</div>
+        </div>`;
+      });
+      html += '</div>';
+    } else {
+      html += `<div class="dash-section" style="color:var(--text3);font-size:11px;">No campaign data found in this period.</div>`;
+    }
+
+    if (card.topSources.length) {
+      html += `<div class="dash-section">
+        <div class="dash-section-title">Lead Sources</div>`;
+      const maxSrc = card.topSources[0][1];
+      card.topSources.forEach(([src, count]) => {
+        const pct = Math.round(count/maxSrc*100);
+        const color = src.toLowerCase().includes('facebook') || src.toLowerCase().includes('fb') ? '#1877F2' : 'var(--accent)';
+        html += `<div class="dash-camp-row">
+          <div class="dash-camp-name">${esc(src||'direct')}</div>
+          <div style="width:60px;background:var(--surface2);border-radius:99px;height:6px;overflow:hidden;flex-shrink:0;">
+            <div style="height:6px;background:${color};border-radius:99px;width:${pct}%;"></div>
+          </div>
+          <div class="dash-camp-count" style="color:${color};">${count}</div>
+        </div>`;
+      });
+      html += '</div>';
+    }
+
+    html += '</div>';
+  });
+  html += '</div>';
+  el.innerHTML = html;
+}
+
+
+// ── PIXEL SCRIPTS ─────────────────────────────────────────────
+const PIXEL_SCRIPTS = {
+  'firstouchbeauty.com': {
+    pixel: '1180664739949233',
+    code: `<!-- Meta Pixel Code -->
+<script>
+  !function(f,b,e,v,n,t,s)
+  {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+  n.callMethod.apply(n,arguments):n.queue.push(arguments)};
+  if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
+  n.queue=[];t=b.createElement(e);t.async=!0;
+  t.src=v;s=b.getElementsByTagName(e)[0];
+  s.parentNode.insertBefore(t,s)}(window, document,'script',
+  'https://connect.facebook.net/en_US/fbevents.js');
+  fbq('init', '1180664739949233');
+  fbq('track', 'PageView');
+<\/script>
+<noscript>
+  <img height="1" width="1" style="display:none"
+    src="https://www.facebook.com/tr?id=1180664739949233&ev=PageView&noscript=1"/>
+</noscript>
+<!-- End Meta Pixel Code -->`
+  },
+  'noneedleneeded.com': {
+    pixel: '540031443835405',
+    code: `<!-- Meta Pixel Code -->
+<script>
+  !function(f,b,e,v,n,t,s)
+  {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+  n.callMethod.apply(n,arguments):n.queue.push(arguments)};
+  if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
+  n.queue=[];t=b.createElement(e);t.async=!0;
+  t.src=v;s=b.getElementsByTagName(e)[0];
+  s.parentNode.insertBefore(t,s)}(window, document,'script',
+  'https://connect.facebook.net/en_US/fbevents.js');
+  fbq('init', '540031443835405');
+  fbq('track', 'PageView');
+<\/script>
+<noscript>
+  <img height="1" width="1" style="display:none"
+    src="https://www.facebook.com/tr?id=540031443835405&ev=PageView&noscript=1"/>
+</noscript>
+<!-- End Meta Pixel Code -->`
+  },
+  'advancedbeautytreatments.com': {
+    pixel: '819221296693583',
+    code: `<!-- Meta Pixel Code -->
+<script>
+  !function(f,b,e,v,n,t,s)
+  {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+  n.callMethod.apply(n,arguments):n.queue.push(arguments)};
+  if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
+  n.queue=[];t=b.createElement(e);t.async=!0;
+  t.src=v;s=b.getElementsByTagName(e)[0];
+  s.parentNode.insertBefore(t,s)}(window, document,'script',
+  'https://connect.facebook.net/en_US/fbevents.js');
+  fbq('init', '819221296693583');
+  fbq('track', 'PageView');
+<\/script>
+<noscript>
+  <img height="1" width="1" style="display:none"
+    src="https://www.facebook.com/tr?id=819221296693583&ev=PageView&noscript=1"/>
+</noscript>
+<!-- End Meta Pixel Code -->`
+  }
+};
+
+function getPixelForDomain(domain) {
+  for (const [key, val] of Object.entries(PIXEL_SCRIPTS)) {
+    if (domain.includes(key)) return val;
+  }
+  return null;
+}
+
+async function injectPixelToAllFunnels(locId) {
+  const tok = getToken(locId);
+  if (!tok) { showToast('No token'); return; }
+
+  const btn = document.getElementById('btnInjectPixel-' + locId);
+  const statusEl = document.getElementById('pixelStatus-' + locId);
+  if (btn) { btn.innerHTML = '<span class="spinner"></span>'; btn.disabled = true; }
+  if (statusEl) { statusEl.style.display = 'block'; statusEl.innerHTML = '<span class="spinner"></span> Loading funnels...'; }
+
+  try {
+    const fd = await apiFetch(tok, 'GET', '/funnels/funnel/list?locationId=' + locId + '&limit=100');
+    const funnels = fd.funnels || fd.data || fd.list || fd.items || [];
+
+    let ok = 0, skip = 0, err = 0, noPixel = 0;
+    const log = [];
+
+    for (const funnel of funnels) {
+      const funnelId = funnel.id || funnel._id || '';
+      const funnelName = funnel.name || funnel.title || funnelId;
+
+      // Get domain for this funnel
+      const domain = getDomain(locId) || '';
+      const pixel = getPixelForDomain(domain);
+
+      if (!pixel) {
+        noPixel++;
+        log.push('⚠ ' + esc(funnelName) + ' — no pixel for domain: ' + esc(domain));
+        continue;
+      }
+
+      // Get current head code
+      const currentHead = funnel.headCode || funnel.headerCode || '';
+
+      // Check if pixel already exists
+      if (currentHead.includes(pixel.pixel)) {
+        skip++;
+        log.push('⏭ ' + esc(funnelName) + ' — pixel already injected (' + pixel.pixel + ')');
+        continue;
+      }
+
+      // Inject pixel — keep existing head code + add pixel
+      const newHead = currentHead + (currentHead ? '\n' : '') + pixel.code;
+
+      // Try endpoints
+      let saved = false;
+      const toTry = [
+        ['PUT',   '/funnels/funnel/' + funnelId, { name: funnelName, headCode: newHead, locationId: locId }],
+        ['PATCH', '/funnels/funnel/' + funnelId, { headCode: newHead, locationId: locId }],
+        ['PUT',   '/funnels/' + funnelId,         { headCode: newHead, locationId: locId }],
+        ['PATCH', '/funnels/' + funnelId,         { headCode: newHead, locationId: locId }],
+      ];
+
+      for (const [method, ep, body] of toTry) {
+        try {
+          await apiFetch(tok, method, ep, body);
+          saved = true;
+          break;
+        } catch(e) {
+          if (!e.message.includes('404') && !e.message.includes('405')) break;
+        }
+      }
+
+      if (saved) {
+        ok++;
+        log.push('✓ ' + esc(funnelName) + ' — pixel ' + pixel.pixel + ' injected');
+      } else {
+        err++;
+        log.push('✕ ' + esc(funnelName) + ' — failed to update via API');
+      }
+
+      await sleep(300);
+    }
+
+    const summary = ok + ' injected, ' + skip + ' already had pixel' + (err ? ', ' + err + ' errors' : '') + (noPixel ? ', ' + noPixel + ' no domain match' : '');
+    if (statusEl) {
+      statusEl.innerHTML = '<div style="font-weight:700;margin-bottom:6px;">' + summary + '</div>' +
+        '<div style="font-size:11px;line-height:1.8;color:var(--text2);">' + log.join('<br>') + '</div>';
+    }
+    showToast(summary);
+  } catch(e) {
+    if (statusEl) statusEl.innerHTML = '<span style="color:var(--error);">Error: ' + esc(e.message) + '</span>';
+  } finally {
+    if (btn) { btn.innerHTML = 'Inject Pixel to All Funnels'; btn.disabled = false; }
+  }
+}
+
+window.addEventListener('DOMContentLoaded', function() {
+  const savedToken = localStorage.getItem('ghl_agency_token');
+  const savedCompany = localStorage.getItem('ghl_company_id');
+  if (savedToken) document.getElementById('agencyToken').value = savedToken;
+  if (savedCompany) document.getElementById('companyId').value = savedCompany;
+  // Auto-connect if both are saved
+  if (savedToken && savedCompany) {
+    setTimeout(() => conectar(), 400);
+  }
+});
+// ── SHARED STORAGE (sync tokens between browsers via URL hash) ──
+function sharedSet(key, val) {
+  try { localStorage.setItem(key, JSON.stringify(val)); } catch(e) {}
+}
+
+function sharedGet(key) {
+  try { return JSON.parse(localStorage.getItem(key) || 'null'); } catch(e) { return null; }
+}
+
+function saveToken(id, token) {
+  const t = loadTokens();
+  t[id] = token;
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(t));
+  sharedSet(STORAGE_KEY, t);
+}
+function getToken(id) { return loadTokens()[id] || ''; }
+
+function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+function ts() { return new Date().toTimeString().slice(0,8); }
+function showErr(id, msg, color) { const e = document.getElementById(id); e.textContent = msg; e.style.color = color || 'var(--error)'; e.style.display = 'block'; }
+function hideErr(id) { const e=document.getElementById(id); if(e) e.style.display='none'; }
+
+async function apiFetch(token, method, path, body) {
+  const h = new Headers();
+  h.append('Authorization', 'Bearer ' + token);
+  h.append('Version', '2021-07-28');
+  if (body) h.append('Content-Type', 'application/json');
+  const opts = { method, headers: h };
+  if (body) opts.body = JSON.stringify(body);
+  const r = await fetch(BASE + path, opts);
+  const txt = await r.text();
+  if (!r.ok) throw new Error('HTTP ' + r.status + ' ' + txt.slice(0,120));
+  return txt ? JSON.parse(txt) : {};
+}
+
+function goStep(n) {
+  [1,2,3,4].forEach(i => {
+    const el = document.getElementById('step'+i);
+    el.classList.remove('active','done');
+    document.getElementById('n'+i).textContent = i;
+  });
+  for (let i = 1; i < n; i++) {
+    document.getElementById('step'+i).classList.add('done');
+    document.getElementById('n'+i).textContent = '✓';
+  }
+  document.getElementById('step'+n).classList.add('active');
+  document.getElementById('step'+n).scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// STEP 1
+
+
+
+function toggleAll(val) {
+  allLocs.forEach(l => {
+    if (val && !getToken(l.id)) return;
+    val ? selected.add(l.id) : selected.delete(l.id);
+    const el = document.getElementById('li-' + l.id);
+    if (el) el.classList.toggle('sel', val && !!getToken(l.id));
+  });
+  updateCount();
+}
+
+function toggleConnected() {
+  selected.clear();
+  allLocs.forEach(l => {
+    if (getToken(l.id)) selected.add(l.id);
+    const el = document.getElementById('li-' + l.id);
+    if (el) el.classList.toggle('sel', !!getToken(l.id));
+  });
+  updateCount();
+}
+
+function updateCount() {
+  document.getElementById('selCount').textContent = selected.size + ' selected';
+  document.getElementById('btnLoadCVs').disabled = selected.size === 0;
+  document.getElementById('btnSF').disabled = selected.size === 0;
+}
+
+function toggleTokenRow(id) {
+  const el = document.getElementById('li-' + id);
+  if (el) el.classList.toggle('show-token');
+}
+
+async function guardarToken(id) {
+  const inp = document.getElementById('ti-' + id);
+  const token = inp ? inp.value.trim() : '';
+  if (!token) return;
+  saveToken(id, token);
+  // Save domain - from input OR auto from CSV
+  const dinp = document.getElementById('di-' + id);
+  if (dinp && dinp.value.trim()) {
+    saveDomain(id, dinp.value.trim().replace(/^https?:\/\//, '').replace(/\/$/, ''));
+  } else {
+    // Auto-save from CSV if available
+    const loc = allLocs.find(l => l.id === id);
+    if (loc) {
+      const csvDomain = getDomainFromCSV(loc.name || loc.businessName || '');
+      if (csvDomain) saveDomain(id, csvDomain);
+    }
+  }
+  renderLocs(allLocs);
+
+  const panel = document.getElementById('inline-cv-' + id);
+  if (!panel) return;
+  panel.style.display = 'block';
+  panel.innerHTML = '<div style="padding:10px 14px;font-size:12px;color:var(--text2);"><span class="spinner"></span> Loading custom values...</div>';
+
+  try {
+    const loc = allLocs.find(l => l.id === id);
+    const locName = loc ? (loc.name||loc.businessName||id) : id;
+    const data = await apiFetch(token, 'GET', '/locations/' + id + '/customValues');
+    const cvs = data.customValues || data.customValue || data.data || [];
+
+    if (!cvs.length) {
+      panel.innerHTML = '<div style="padding:10px 14px;font-size:12px;color:var(--text3);">No custom values found in this sub-account.</div>';
+      return;
+    }
+
+    let html = '<div style="padding:14px;">';
+    html += '<div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.05em;">Custom Values — ' + esc(locName) + '</div>';
+    html += '<div style="display:flex;flex-direction:column;gap:6px;">';
+    cvs.forEach(cv => {
+      html += `<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--surface);border:1.5px solid var(--border);border-radius:10px;">
+        <div style="width:200px;flex-shrink:0;">
+          <div class="inline-cv-key">${esc(cv.name||'')}</div>
+          <div class="inline-cv-current">${cv.value ? esc(cv.value) : '<em style="color:var(--text3)">empty</em>'}</div>
+        </div>
+        <input class="inline-cv-input" type="text" placeholder="New value..."
+          style="flex:1;"
+          data-loc="${id}" data-key="${esc(cv.name||'')}" data-cvid="${esc(cv.id||'')}">
+      </div>`;
+    });
+    html += '</div>';
+    html += '<div class="fe">';
+    html += `<button class="btn btn-ghost btn-sm" onclick="document.getElementById('inline-cv-${id}').style.display='none'">Close</button>`;
+    html += `<button class="btn btn-success btn-sm" onclick="aplicarInline('${id}')">Save Changes</button>`;
+    html += '</div></div>';
+    panel.innerHTML = html;
+  } catch(e) {
+    panel.innerHTML = '<div style="padding:10px 14px;font-size:12px;color:var(--error);">Error: ' + esc(e.message) + '</div>';
+  }
+}
+
+function removeToken(id) {
+  const t = loadTokens(); delete t[id];
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(t));
+  selected.delete(id);
+  renderLocs(allLocs);
+}
+
+async function aplicarInline(locId) {
+  const inputs = document.querySelectorAll('#inline-cv-' + locId + ' .inline-cv-input');
+  const changes = [];
+  inputs.forEach(inp => { const v = inp.value.trim(); if (v) changes.push({ key: inp.dataset.key, cvId: inp.dataset.cvid, val: v }); });
+  if (!changes.length) return;
+  const tok = getToken(locId);
+  const btn = document.querySelector('#inline-cv-' + locId + ' .btn-success');
+  if (btn) { btn.innerHTML = '<span class="spinner"></span> Saving...'; btn.disabled = true; }
+  let ok = 0, err = 0;
+  for (const { key, cvId, val } of changes) {
+    try {
+      if (cvId) await apiFetch(tok, 'PUT', '/locations/'+locId+'/customValues/'+cvId, { name: key, value: val });
+      else {
+        // Try to find by searching all CVs first in case name has slight variation
+        const allCvs = (cvData[locId] ? cvData[locId].cvs : []) || [];
+        const matchCv = allCvs.find(c => 
+          c.name && c.name.toLowerCase().replace(/\s+/g,' ').trim() === 
+          key.toLowerCase().replace(/\s+/g,' ').trim()
+        );
+        if (matchCv && (matchCv.id || matchCv._id)) {
+          // Found by fuzzy match - use PUT
+          const foundId = matchCv.id || matchCv._id;
+          await apiFetch(tok, 'PUT', '/locations/'+locId+'/customValues/'+foundId, { name: key, value: val });
+        } else {
+          // Truly new - create with POST (no fieldKey, GHL rejects it)
+          await apiFetch(tok, 'POST', '/locations/'+locId+'/customValues', { name: key, value: val });
+        }
+      }
+      ok++;
+    } catch(e) { err++; }
+    await sleep(150);
+  }
+  if (btn) {
+    btn.innerHTML = ok + ' saved' + (err ? ', ' + err + ' errors' : '') + ' ✓';
+    btn.style.background = err ? 'var(--warning)' : 'var(--success)';
+    setTimeout(() => { btn.innerHTML = 'Save Changes'; btn.disabled = false; btn.style.background = ''; }, 2500);
+  }
+}
+
+// STEP 3
+const CV_FOLDERS = {"Before and After imgs (GENERAL)": ["Before and After Face 1", "Before and After Face 2", "Before and After Face 3", "Before and After Face 4", "Before and After Face 5", "Before and After Face 6", "Before and After Face 7"], "Before and After imgs (SEPARATE IMAGES)": ["After Face 1", "After Face 2", "After Face 3", "Before Face 1", "Before Face 2", "Before Face 3"], "Client Folder": ["API KEY FOR SUB-LOCATION", "Availability_Client", "Body Duration", "Client Address", "Client Address Directions", "Client Address-Parking", "Client Logo", "Domain", "FTB customer service email", "Location ID", "Location Name", "Location PIXEL ID", "Location Phone", "Main Email Address", "Main Phone Number", "Map Client Address", "Natural Facelift Duration", "OPPO TAG FILED ID FOR SUB-LOCATION", "Spa Photos", "Spa-photo1", "Spa-photo2", "Spa-photo3", "Spa-photo4", "Spa-photo5", "Workflow-Fresh Leads", "Workflow-Negative", "Workflow-Positive", "city/state banner"], "Location Photos": ["Location Photo 5", "Location Photo 6", "Location Photo 7", "Location photo 1", "Location photo 2", "Location photo 3", "Location photo 4"], "Privacy Policy and Terms": ["Privacy Policy", "Terms and Conditions"], "Reviews (GENERAL)": ["Desktop Testimoial Thumbnail Link 1", "Desktop Testimoial Thumbnail Link 2", "Desktop Testimoial Thumbnail Link 3", "Desktop Testimoial Thumbnail Link 4", "Desktop Testimoial Thumbnail Link 5", "Desktop Testimoial Video Link 1", "Desktop Testimoial Video Link 2", "Desktop Testimoial Video Link 3", "Desktop Testimoial Video Link 4", "Desktop Testimoial Video Link 5", "General review 1", "General review 2", "General review 3", "General review 4", "Mobile Testimoial Video Link 1", "Mobile Testimoial Video Link 2", "Mobile Testimoial Video Link 3", "Mobile Testimoial Video Link 4", "Mobile Testimoial Video Link 5", "Mobile Testimoial Thumbnail Link 1", "Mobile Testimoial Thumbnail Link 2", "Mobile Testimoial Thumbnail Link 3", "Mobile Testimoial Thumbnail Link 4", "Mobile Testimoial Thumbnail Link 5", "Txt General review 1", "Txt General review 2", "Txt General review 3", "Txt General review 4", "Txt General review 5"], "Reviews (LOCATION SPECIFIC)": ["Location review 1", "Location review 2", "Location review 3"]};
+
+
+const ACUITY_FIELDS = {
+  "Skin Totale MedSpa Orange": "field:17647173",
+  "Natural Blossom by Adore": "field:18131072",
+  "Esthetix Raleigh": "field:18204354",
+  "Forest Hill Cosmetic Clinic": "field:18077481",
+  "Soap Tree Omaha": "field:17868054",
+  "TKO Beauty Tech - Spa": "field:17868565",
+  "Adore Cookstown": "field:18246594",
+  "Beauty Lounge": "field:17820134",
+  "Below Zero Alpharetta": "field:17727459",
+  "Ben's Beauty Pasadena": "field:17764767",
+  "Mize Med Spa and Wellness Center": "field:17856103",
+  "Gentle Touch Beauty": "field:17967161",
+  "Glameria": "field:17794690",
+  "Good Life Spa": "field:17845579",
+  "Kristals Cosmetics Burlington": "field:18028739",
+  "Meital Studios Beauty Centre": "field:17939209",
+  "Moana Crystals": "field:17806511",
+  "Nova Aesthetic": "field:17734736",
+  "Oasis Aesthetic Spa Henderson": "field:17725285",
+  "Oasis Aesthetics Spa Ness": "field:18207995",
+  "Ora Medical Spa": "field:17818365",
+  "Parie Med Spa": "field:17727242",
+  "Renova Skin Med Spa": "field:18047668",
+  "Skin Analytics": "field:18168883",
+  "Ben’s Beauty Irvine": "field:17756744",
+  "Velora Med Spa": "field:17818741",
+  "Prime Clinic": "field:17738890",
+  "Florentine Skincare & Cosmetics": "field:18350492",
+  "Terra Alma Clinic": "field:17702364",
+  "Skin Totale Spa San Juan": "field:17710774",
+  "Minarelle": "field:18008561",
+  "Tesoro Mio Spa": "field:17870948",
+  "Queen Bee": "field:18131415",
+  "Elysium Cosmetic Clinics": "field:17869569",
+  "Pura Vida": "field:17794690",
+  "Queen Bee Limited Greenwood": "field:17804134",
+  "Dermalogy Med Spa": "field:17819500",
+  "Equanimity Wellness Studio": "field:17878391",
+  "FIL Fall In Love": "field:17960709",
+  "Premier Naples": "field:18008063",
+  "Chantel Beauty Spa": "field:18012918",
+  "Nova Aesthetic Oakville": "field:17734736",
+  "Solei Beauty Lounge": "field:18079721",
+  "Beauty Affairs MediSpa Brookvale": "field:18093091",
+  "Beauty Affairs MediSpa CBD": "field:18095913",
+  "Aeternitas": "field:18100698",
+  "Blesseli Med Spa": "field:18170537",
+  "Hermetise": "field:18215750",
+  "Donna Ella Spa": "field:18226723",
+  "Oasis Aesthetics St. Mary's": "field:18227460",
+  "Joli Visage Naples": "field:18227754",
+  "Oasis Aesthetics Spa Marine": "field:18255571",
+  "Below Zero Rochester": "field:18255755",
+  "VillaGio Spa": "field:18287867",
+  "Solei Beauty Lounge MO": "field:18300960",
+  "Auraderma Spa": "field:18362479",
+  "Oasis Boutique": "field:18337574",
+  "The Beauty Lab": "field:17794690",
+  "Minnesota Aesthetic Center": "field:18354128"
+};
+
+function getAcuityField(locId) {
+  const loc = allLocs.find(l => l.id === locId);
+  const name = loc ? (loc.name || loc.businessName || '') : '';
+  // Try exact match first
+  if (ACUITY_FIELDS[name]) return ACUITY_FIELDS[name];
+  // Try fuzzy match
+  const nl = name.toLowerCase();
+  for (const [k, v] of Object.entries(ACUITY_FIELDS)) {
+    if (nl.includes(k.toLowerCase()) || k.toLowerCase().includes(nl)) return v;
+  }
+  return '';
+}
+const CV_KEY_MAP = {"Before and After Face 1": "before_and_after_face_1", "Before and After Face 2": "before_and_after_face_2", "Before and After Face 3": "before_and_after_face_3", "Before and After Face 4": "before_and_after_face_4", "Before and After Face 5": "before_and_after_face_5", "Before and After Face 6": "before_and_after_face_6", "Before and After Face 7": "before_and_after_face_7", "After Face 1": "after_face_1", "After Face 2": "after_face_2", "After Face 3": "after_face_3", "Before Face 1": "before_face_1", "Before Face 2": "before_face_2", "Before Face 3": "before_face_3", "API KEY FOR SUB-LOCATION": "api_key_for_sublocation", "Availability_Client": "availability_client", "Body Duration": "body_duration", "Client Address": "client_address", "Client Address Directions": "client_address_directions", "Client Address-Parking": "client_addressparking", "Client Logo": "client_logo", "Domain": "domain", "FTB customer service email": "ftb_customer_service_email", "Location ID": "location_id", "Location Name": "location_name", "Location PIXEL ID": "location_pixel_id", "Location Phone": "location_phone", "Main Email Address": "main_email_address", "Main Phone Number": "main_phone_number", "Map Client Address": "map_client_address", "Natural Facelift Duration": "natural_facelift_duration", "OPPO TAG FILED ID FOR SUB-LOCATION": "oppo_tag_filed_id_for_sublocation", "Spa Photos": "spa_photos", "Spa-photo1": "spaphoto1", "Spa-photo2": "spaphoto2", "Spa-photo3": "spaphoto3", "Spa-photo4": "spaphoto4", "Spa-photo5": "spaphoto5", "Workflow-Fresh Leads": "workflowfresh_leads", "Workflow-Negative": "workflownegative", "Workflow-Positive": "workflowpositive", "city/state banner": "citystate_banner", "Location Photo 5": "location_photo_5", "Location Photo 6": "location_photo_6", "Location Photo 7": "location_photo_7", "Location photo 1": "location_photo_1", "Location photo 2": "location_photo_2", "Location photo 3": "location_photo_3", "Location photo 4": "location_photo_4", "Privacy Policy": "privacy_policy", "Terms and Conditions": "terms_and_conditions", "Desktop Testimoial Thumbnail Link 1": "desktop_testimoial_thumbnail_link_1", "Desktop Testimoial Thumbnail Link 2": "desktop_testimoial_thumbnail_link_2", "Desktop Testimoial Thumbnail Link 3": "desktop_testimoial_thumbnail_link_3", "Desktop Testimoial Thumbnail Link 4": "desktop_testimoial_thumbnail_link_4", "Desktop Testimoial Thumbnail Link 5": "desktop_testimoial_thumbnail_link_5", "Desktop Testimoial Video Link 1": "desktop_testimoial_video_link_1", "Desktop Testimoial Video Link 2": "desktop_testimoial_video_link_2", "Desktop Testimoial Video Link 3": "desktop_testimoial_video_link_3", "Desktop Testimoial Video Link 4": "desktop_testimoial_video_link_4", "Desktop Testimoial Video Link 5": "desktop_testimoial_video_link_5", "General review 1": "general_review_1", "General review 2": "general_review_2", "General review 3": "general_review_3", "General review 4": "general_review_4", "Mobile Testimoial Video Link 1": "mobile_testimoial_video_link_1", "Mobile Testimoial Video Link 2": "mobile_testimoial_video_link_2", "Mobile Testimoial Video Link 3": "mobile_testimoial_video_link_3", "Mobile Testimoial Video Link 4": "mobile_testimoial_video_link_4", "Mobile Testimoial Video Link 5": "mobile_testimoial_video_link_5", "Mobile Testimoial Thumbnail Link 1": "mobile_testimoial_thumbnail_link_1", "Mobile Testimoial Thumbnail Link 2": "mobile_testimoial_thumbnail_link_2", "Mobile Testimoial Thumbnail Link 3": "mobile_testimoial_thumbnail_link_3", "Mobile Testimoial Thumbnail Link 4": "mobile_testimoial_thumbnail_link_4", "Mobile Testimoial Thumbnail Link 5": "mobile_testimoial_thumbnail_link_5", "Txt General review 1": "txt_general_review_1", "Txt General review 2": "txt_general_review_2", "Txt General review 3": "txt_general_review_3", "Txt General review 4": "txt_general_review_4", "Txt General review 5": "txt_general_review_5", "Location review 1": "location_review_1", "Location review 2": "location_review_2", "Location review 3": "location_review_3"};
+const CV_FOLDER_ORDER = ["Before and After imgs (GENERAL)", "Before and After imgs (SEPARATE IMAGES)", "Client Folder", "Location Photos", "Privacy Policy and Terms", "Reviews (GENERAL)", "Reviews (LOCATION SPECIFIC)"];
+
+
+// Store pending values separate from DOM
+let pendingValues = {};
+
+function setPending(locId, cvName, val) {
+  if (!pendingValues[locId]) pendingValues[locId] = {};
+  if (val.trim()) pendingValues[locId][cvName] = val.trim();
+  else delete pendingValues[locId][cvName];
+}
+
+function getPending(locId, cvName) {
+  return (pendingValues[locId] || {})[cvName] || '';
+}
+
+async function cargarCVs() {
+  if (!selected.size) { showErr('err2', 'Select sub-accounts first.'); return; }
+  hideErr('err2');
+  pendingValues = {};
+  const btn = document.getElementById('btnLoadCVs');
+  btn.innerHTML = '<span class="spinner"></span> Loading...';
+  btn.disabled = true;
+  document.getElementById('cvWrap').innerHTML = '<div style="padding:20px;font-size:12px;color:var(--text2);"><span class="spinner"></span> Loading from ' + selected.size + ' account(s)...</div>';
+  cvData = {};
+  const ids = [...selected];
+  const keySet = new Set();
+  for (let i = 0; i < ids.length; i++) {
+    const locId = ids[i];
+    const loc = allLocs.find(l => l.id === locId);
+    const locName = loc ? (loc.name || loc.businessName || locId) : locId;
+    const tok = getToken(locId);
+    if (!tok) { cvData[locId] = { name: locName, cvs: [], error: 'No token' }; continue; }
+    try {
+      const data = await apiFetch(tok, 'GET', '/locations/' + locId + '/customValues');
+      const cvs = data.customValues || data.customValue || data.data || [];
+      const arr = Array.isArray(cvs) ? cvs : [];
+      // Log first CV to see structure
+      if (arr.length > 0) console.log('CV sample:', JSON.stringify(arr[0]));
+      cvData[locId] = { name: locName, cvs: arr, token: tok };
+      arr.forEach(cv => { if (cv.name) keySet.add(cv.name); });
+    } catch(e) {
+      cvData[locId] = { name: locName, cvs: [], error: e.message };
+    }
+    if (i < ids.length - 1) await sleep(150);
+  }
+  allCvKeys = [...keySet].sort();
+  renderCVFolders();
+  document.getElementById('cvInfo').textContent = allCvKeys.length + ' custom values — ' + ids.filter(id => cvData[id] && !cvData[id].error).length + '/' + ids.length + ' accounts';
+  const bb = document.getElementById('brandBtns');
+  if (bb) bb.style.display = 'block';
+  btn.innerHTML = 'Reload';
+  btn.disabled = false;
+  nav('cv');
+}
+
+function renderCVFolders() {
+  const wrap = document.getElementById('cvWrap');
+  const ids = [...selected];
+  if (!ids.length) {
+    wrap.innerHTML = '<div style="padding:40px;text-align:center;font-size:12px;color:var(--text3);">Select sub-accounts first.</div>';
+    return;
+  }
+
+  let html = '';
+  let fi = 0;
+
+  CV_FOLDER_ORDER.forEach(folder => {
+    const keys = CV_FOLDERS[folder];
+    if (!keys || !keys.length) return;
+    const idx = fi++;
+
+    html += `<div class="cvf" id="cvf-${idx}">
+      <div class="cvf-hdr" onclick="toggleCVF(${idx})">
+        <span class="cvf-arrow" id="cvfarrow-${idx}">&#9654;</span>
+        <span class="cvf-name">${esc(folder)}</span>
+        <span class="cvf-count">${keys.length}</span>
+      </div>
+      <div class="cvf-body" id="cvfbody-${idx}" style="display:none;">
+        <div class="cvf-row cvf-row-hdr">
+          <div class="cvf-cell cvf-cell-label">Field</div>`;
+
+    ids.forEach(locId => {
+      const d = cvData[locId];
+      html += `<div class="cvf-cell cvf-cell-acct">${esc(d ? d.name : locId)}${d && d.error ? '<br><small style="color:var(--error)">'+esc(d.error)+'</small>' : '<br><small style="color:var(--success)">✓ loaded</small>'}</div>`;
+    });
+    html += `</div>`;
+
+    keys.forEach(key => {
+      html += `<div class="cvf-row">
+        <div class="cvf-cell cvf-cell-label">
+          <div style="font-weight:600;margin-bottom:5px;">${esc(key)}</div>
+          <div style="display:flex;gap:5px;align-items:center;">
+            <input type="text" placeholder="Same for all..."
+              style="flex:1;min-width:0;background:var(--surface);border:1.5px solid var(--warning);color:var(--text);font-family:var(--font);font-size:11px;padding:4px 8px;outline:none;border-radius:7px;">
+            <button class="btn btn-sm" style="padding:4px 8px;font-size:9px;border-radius:50px;background:var(--warning);box-shadow:none;flex-shrink:0;color:#fff;"
+              onclick="applyBulkKey(this)">All &#8594;</button>
+          </div>
+        </div>`;
+      ids.forEach(locId => {
+        const d = cvData[locId];
+        const cv = d ? (d.cvs||[]).find(c => c.name === key) : null;
+        const cur = cv ? (cv.value||'') : '';
+        const cvId = cv ? (cv.id||cv._id||'') : '';
+        const pending = getPending(locId, key);
+        html += `<div class="cvf-cell">
+            <div class="cvf-cur">${cur ? esc(cur) : '<em>not set</em>'}</div>
+            <input class="cvf-inp" type="text"
+              value="${esc(pending)}"
+              placeholder="New value..."
+              data-loc="${locId}"
+              data-key="${esc(key)}"
+              data-cvid="${cvId}"
+              oninput="setPending('${locId}','${esc(key)}',this.value)">
+          </div>`;
+      });
+      html += `</div>`;
+    });
+
+    html += `</div></div>`;
+  });
+
+  wrap.innerHTML = html;
+}
+
+
+function applyBulkKey(btn) {
+  const cvfRow = btn.closest('.cvf-row');
+  if (!cvfRow) return;
+  const inp = cvfRow.querySelector('.cvf-cell-label input[type=text]');
+  const val = inp ? inp.value.trim() : '';
+  if (!val) return;
+  const firstInp = cvfRow.querySelector('.cvf-inp');
+  if (!firstInp) return;
+  const key = firstInp.dataset.key;
+  const ids = [...selected];
+  ids.forEach(locId => setPending(locId, key, val));
+  cvfRow.querySelectorAll('.cvf-inp').forEach(el => {
+    el.value = val;
+    el.style.borderColor = 'var(--warning)';
+    setTimeout(() => { el.style.borderColor = 'var(--border)'; }, 1500);
+  });
+  showToast('✓ "' + key + '" set for all ' + ids.length + ' account(s)');
+}
+
+function toggleCVF(idx) {
+  const body = document.getElementById('cvfbody-' + idx);
+  const arrow = document.getElementById('cvfarrow-' + idx);
+  if (!body) return;
+  const open = body.style.display !== 'none';
+  body.style.display = open ? 'none' : 'block';
+  if (arrow) arrow.style.transform = open ? '' : 'rotate(90deg)';
+}
+
+function filterCVs(q) {
+  if (!q) { renderCVFolders(); return; }
+  const ql = q.toLowerCase();
+  // Temporarily filter CV_FOLDERS
+  const origFolders = {};
+  Object.keys(CV_FOLDERS).forEach(f => { origFolders[f] = CV_FOLDERS[f]; });
+  Object.keys(CV_FOLDERS).forEach(f => {
+    CV_FOLDERS[f] = origFolders[f].filter(k => k.toLowerCase().includes(ql));
+  });
+  renderCVFolders();
+  // Restore
+  Object.keys(CV_FOLDERS).forEach(f => { CV_FOLDERS[f] = origFolders[f]; });
+}
+
+const BRAND_PRESETS = {
+  'nnn': { label:'No Needle Needed', color:'#00b4d8', values:{ 'Domain':'No Needle Needed', 'Location PIXEL ID':'540031443835405', 'Privacy Policy':'https://policy.noneedleneeded.com/policy', 'Terms and Conditions':'https://policy.noneedleneeded.com/terms', 'FTB customer service email':'hello@noneedleneeded.com' } },
+  'ftb': { label:'First Touch Beauty', color:'#ff1d8d', values:{ 'Domain':'First Touch Beauty', 'Location PIXEL ID':'1180664739949233', 'Privacy Policy':'https://policy.firstouchbeauty.com/policy', 'Terms and Conditions':'https://policy.firstouchbeauty.com/terms', 'FTB customer service email':'hello@firstouchbeauty.com' } },
+  'advb': { label:'Adv Beauty Treatments', color:'#7b2ff7', values:{ 'Domain':'© 2025 Advanced Beauty Treatments. <br> AdvancedBeautyTreatments.com is operated by No Needle Needed LLC.', 'Location PIXEL ID':'819221296693583', 'Privacy Policy':'https://policy.advancedbeautytreatments.com/advb-policy', 'Terms and Conditions':'https://policy.advancedbeautytreatments.com/terms', 'FTB customer service email':'hello@noneedleneeded.com' } },
+  'general': { label:'General CVs', color:'#00c97a', values: {"Before and After Face 1": "https://assets.cdn.filesafe.space/6HyntUzpAjqcibyVmZpi/media/69e4f41550b9a3263a132970.webp", "Before and After Face 2": "https://assets.cdn.filesafe.space/6HyntUzpAjqcibyVmZpi/media/69e4f4158696a78b8d1ef956.webp", "Before and After Face 3": "https://assets.cdn.filesafe.space/6HyntUzpAjqcibyVmZpi/media/69e4f41538381eafa88ebe22.webp", "Before and After Face 4": "https://assets.cdn.filesafe.space/6HyntUzpAjqcibyVmZpi/media/69e4f4152c135a8c8353de17.webp", "Before and After Face 5": "https://assets.cdn.filesafe.space/6HyntUzpAjqcibyVmZpi/media/69e4f415c56ad27908e1ca58.webp", "Before and After Face 6": "https://assets.cdn.filesafe.space/6HyntUzpAjqcibyVmZpi/media/69e4f415c56ad27908e1ca57.webp", "Before and After Face 7": "https://assets.cdn.filesafe.space/6HyntUzpAjqcibyVmZpi/media/69e4f41538381eafa88ebe23.webp", "After Face 1": "https://assets.cdn.filesafe.space/6HyntUzpAjqcibyVmZpi/media/69e4f4a438381eafa88edea6.webp", "After Face 2": "https://assets.cdn.filesafe.space/6HyntUzpAjqcibyVmZpi/media/69e4f4a5c56ad27908e1eaaa.webp", "After Face 3": "https://assets.cdn.filesafe.space/6HyntUzpAjqcibyVmZpi/media/69e4f4a5c56ad27908e1eaa8.png", "Before Face 1": "https://assets.cdn.filesafe.space/6HyntUzpAjqcibyVmZpi/media/69e4f4a5c56ad27908e1eaa9.webp", "Before Face 2": "https://assets.cdn.filesafe.space/6HyntUzpAjqcibyVmZpi/media/69e4f4a58696a78b8d1f193e.webp", "Before Face 3": "https://assets.cdn.filesafe.space/6HyntUzpAjqcibyVmZpi/media/69e4f4a52c135a8c8353fea1.webp", "Desktop Testimoial Thumbnail Link 1": "https://assets.cdn.filesafe.space/6HyntUzpAjqcibyVmZpi/media/69e4f6012c135a8c835449f3.webp", "Desktop Testimoial Thumbnail Link 2": "https://assets.cdn.filesafe.space/6HyntUzpAjqcibyVmZpi/media/69e4f6018696a78b8d1f6312.webp", "Desktop Testimoial Thumbnail Link 3": "https://assets.cdn.filesafe.space/6HyntUzpAjqcibyVmZpi/media/69e4f601c56ad27908e2360b.webp", "Desktop Testimoial Thumbnail Link 4": "https://assets.cdn.filesafe.space/6HyntUzpAjqcibyVmZpi/media/69e4f60150b9a3263a13957c.webp", "Desktop Testimoial Thumbnail Link 5": "https://assets.cdn.filesafe.space/6HyntUzpAjqcibyVmZpi/media/69e4f601c56ad27908e23609.webp", "Desktop Testimoial Video Link 1": "https://assets.cdn.filesafe.space/6HyntUzpAjqcibyVmZpi/media/69e4f60150b9a3263a139575.mp4", "Desktop Testimoial Video Link 2": "https://assets.cdn.filesafe.space/6HyntUzpAjqcibyVmZpi/media/69e4f6012c135a8c835449f4.mp4", "Desktop Testimoial Video Link 3": "https://assets.cdn.filesafe.space/6HyntUzpAjqcibyVmZpi/media/69e4f601c56ad27908e2360a.mp4", "Desktop Testimoial Video Link 4": "https://assets.cdn.filesafe.space/6HyntUzpAjqcibyVmZpi/media/69e4f6018696a78b8d1f6311.mp4", "Desktop Testimoial Video Link 5": "https://assets.cdn.filesafe.space/6HyntUzpAjqcibyVmZpi/media/69e4f6018696a78b8d1f630a.mp4", "General review 1": "https://assets.cdn.filesafe.space/6HyntUzpAjqcibyVmZpi/media/69e4f5728696a78b8d1f43c8.webp", "General review 2": "https://assets.cdn.filesafe.space/6HyntUzpAjqcibyVmZpi/media/69e4f5728696a78b8d1f43c7.webp", "General review 3": "https://assets.cdn.filesafe.space/6HyntUzpAjqcibyVmZpi/media/69e4f572c56ad27908e21510.webp", "General review 4": "https://assets.cdn.filesafe.space/6HyntUzpAjqcibyVmZpi/media/69e4f5722c135a8c835428e1.webp", "Mobile Testimoial Video Link 1": "https://assets.cdn.filesafe.space/6HyntUzpAjqcibyVmZpi/media/69e4f5e5c56ad27908e22fdc.mp4", "Mobile Testimoial Video Link 2": "https://assets.cdn.filesafe.space/6HyntUzpAjqcibyVmZpi/media/69e4f5e5c56ad27908e22fe2.mp4", "Mobile Testimoial Video Link 3": "https://assets.cdn.filesafe.space/6HyntUzpAjqcibyVmZpi/media/69e4f5e550b9a3263a138ee9.mp4", "Mobile Testimoial Video Link 4": "https://assets.cdn.filesafe.space/6HyntUzpAjqcibyVmZpi/media/69e4f5e550b9a3263a138ef7.mp4", "Mobile Testimoial Video Link 5": "https://assets.cdn.filesafe.space/6HyntUzpAjqcibyVmZpi/media/69e4f5e5c56ad27908e22fdb.mp4", "Mobile Testimoial Thumbnail Link 1": "https://assets.cdn.filesafe.space/6HyntUzpAjqcibyVmZpi/media/69e4f5e5c56ad27908e22fe3.webp", "Mobile Testimoial Thumbnail Link 2": "https://assets.cdn.filesafe.space/6HyntUzpAjqcibyVmZpi/media/69e4f5e5c56ad27908e22fe1.webp", "Mobile Testimoial Thumbnail Link 3": "https://assets.cdn.filesafe.space/6HyntUzpAjqcibyVmZpi/media/69e4f5e550b9a3263a138ef4.webp", "Mobile Testimoial Thumbnail Link 4": "https://assets.cdn.filesafe.space/6HyntUzpAjqcibyVmZpi/media/69e4f5e5c56ad27908e22fe4.webp", "Mobile Testimoial Thumbnail Link 5": "https://assets.cdn.filesafe.space/6HyntUzpAjqcibyVmZpi/media/69e4f5e538381eafa88f2427.webp", "Txt General review 1": "Excellent experience from start to finish! The staff is incredibly skilled and caring, and my skin looks smoother and brighter than ever. I couldn�t be happier with the results.", "Txt General review 2": "One of the best choices I did, amazing service with amazing people that are very professional and knowledgeable about anything related to your skin!", "Txt General review 3": "Im so glad I stopped by a few weeks ago. I love the products and have really noticed a difference in my skin on such a short time!", "Txt General review 4": "An excellent experience with a highly professional team that is extremely knowledgeable about all things skin.", "Txt General review 5": "Wonderful products and a very professional, knowledgeable staff. My complexion has definitely improved and I am very pleased."} }
+};
+
+function applyBrandToAll(brandKey) {
+  const preset = BRAND_PRESETS[brandKey];
+  if (!preset) return;
+  const ids = [...selected];
+  if (!ids.length) { showToast('Select accounts in Accounts tab first'); return; }
+  if (!Object.keys(cvData).length) { showToast('Load Custom Values first, then apply preset'); return; }
+  // Set all values in pendingValues
+  ids.forEach(locId => {
+    Object.entries(preset.values).forEach(([k,v]) => setPending(locId, k, v));
+  });
+  // Re-render so inputs show updated values
+  renderCVFolders();
+  // Open folders that have preset keys
+  let fi = 0;
+  const presetFolders = new Set();
+  Object.keys(preset.values).forEach(k => {
+    CV_FOLDER_ORDER.forEach(f => { if ((CV_FOLDERS[f]||[]).includes(k)) presetFolders.add(f); });
+  });
+  CV_FOLDER_ORDER.forEach(folder => {
+    const keys = CV_FOLDERS[folder];
+    if (!keys || !keys.length) return;
+    if (presetFolders.has(folder)) {
+      const body = document.getElementById('cvfbody-' + fi);
+      if (body && body.style.display === 'none') toggleCVF(fi);
+    }
+    fi++;
+  });
+  // Count only keys that exist in the loaded CVs
+  let filled = 0;
+  ids.forEach(locId => {
+    Object.keys(preset.values).forEach(k => {
+      const d = cvData[locId];
+      if (d) filled++;
+    });
+  });
+  showToast('✓ ' + preset.label + ': ' + Object.keys(preset.values).length + ' fields set for ' + ids.length + ' account(s) — click Apply Changes to save');
+}
+
+function showToast(msg) {
+  let t = document.getElementById('toast');
+  if (!t) { t = document.createElement('div'); t.id = 'toast'; t.style.cssText = 'position:fixed;bottom:24px;right:24px;background:var(--success);color:#fff;padding:10px 18px;border-radius:50px;font-size:13px;font-weight:600;z-index:9999;box-shadow:0 4px 16px rgba(0,201,122,0.4);transition:opacity 0.4s;'; document.body.appendChild(t); }
+  t.textContent = msg;
+  t.style.opacity = '1';
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => { t.style.opacity = '0'; }, 3000);
+}
+
+async function aplicar() {
+  const changes = [];
+  Object.entries(pendingValues).forEach(([locId, kvs]) => {
+    Object.entries(kvs).forEach(([key, val]) => {
+      if (!val) return;
+      const d = cvData[locId];
+      const cv = d ? (d.cvs||[]).find(c => c.name === key) : null;
+      const cvId = cv ? (cv.id||cv._id||'') : '';
+      changes.push({ locId, key, cvId, val });
+    });
+  });
+  if (!changes.length) { showErr('err3', 'No values to apply. Fill fields or use a brand preset button.'); return; }
+  hideErr('err3');
+  nav('results');
+  document.getElementById('sTotal').textContent = changes.length;
+  document.getElementById('sOk').textContent = '0';
+  document.getElementById('sErr').textContent = '0';
+  document.getElementById('logBox').innerHTML = '';
+  document.getElementById('progFill').style.width = '0%';
+  let ok = 0, err = 0;
+  addLog('info', 'Applying ' + changes.length + ' change(s)...');
+  for (let i = 0; i < changes.length; i++) {
+    const { locId, key, cvId, val } = changes[i];
+    const locName = cvData[locId] ? cvData[locId].name : locId;
+    const tok = getToken(locId);
+    if (!tok) { err++; addLog('err', '✕ ' + locName + ': no token'); continue; }
+    try {
+      // Debug: log cvId being used
+      console.log('Applying:', key, '| cvId:', cvId, '| method:', cvId ? 'PUT' : 'POST');
+      if (cvId) await apiFetch(tok, 'PUT', '/locations/'+locId+'/customValues/'+cvId, { name: key, value: val });
+      else {
+        // Try to find by searching all CVs first in case name has slight variation
+        const allCvs = (cvData[locId] ? cvData[locId].cvs : []) || [];
+        const matchCv = allCvs.find(c => 
+          c.name && c.name.toLowerCase().replace(/\s+/g,' ').trim() === 
+          key.toLowerCase().replace(/\s+/g,' ').trim()
+        );
+        if (matchCv && (matchCv.id || matchCv._id)) {
+          // Found by fuzzy match - use PUT
+          const foundId = matchCv.id || matchCv._id;
+          await apiFetch(tok, 'PUT', '/locations/'+locId+'/customValues/'+foundId, { name: key, value: val });
+        } else {
+          // Truly new - create with POST (no fieldKey, GHL rejects it)
+          await apiFetch(tok, 'POST', '/locations/'+locId+'/customValues', { name: key, value: val });
+        }
+      }
+      ok++;
+      addLog('ok', '✓ ' + locName + ' · ' + key);
+    } catch(e) {
+      err++;
+      addLog('err', '✕ ' + locName + ' · ' + key + ': ' + e.message);
+    }
+    document.getElementById('sOk').textContent = ok;
+    document.getElementById('sErr').textContent = err;
+    document.getElementById('progFill').style.width = Math.round(((i+1)/changes.length)*100) + '%';
+    if (i < changes.length-1) await sleep(200);
+  }
+  addLog('info', 'Done. ' + ok + ' successful, ' + err + ' errors.');
+  if (!err) pendingValues = {};
+}
+
+async function loadSF(locId, tabEl) {
+  // Update active tab
+  document.querySelectorAll('.sf-loc-tab').forEach(t => t.classList.remove('active'));
+  if (tabEl) tabEl.classList.add('active');
+
+  const tok = getToken(locId);
+  if (!tok) return;
+
+  const content = document.getElementById('sfContent');
+  content.innerHTML = '<div class="loading-msg"><span class="spinner"></span> Loading sites and funnels...</div>';
+
+  let funnels = [], sites = [], domainMap = {};
+
+  // 1. Manually saved domain
+  const savedDomain = getDomain(locId);
+  if (savedDomain) domainMap['_saved'] = savedDomain;
+
+  // 2. CSV pre-loaded domain by location name
+  const loc = allLocs.find(l => l.id === locId);
+  const locName = loc ? (loc.name || loc.businessName || '') : '';
+  const csvDomain = getDomainFromCSV(locName);
+  if (csvDomain) domainMap['_csv'] = csvDomain;
+
+  // 3. Try API
+  try {
+    const dd = await apiFetch(tok, 'GET', '/locations/' + locId + '/domains');
+    const domains = dd.domains || dd.data || [];
+    domains.forEach(d => {
+      const url = (d.domain || d.url || d.name || '').replace(/^https?:\/\//, '').replace(/\/$/, '');
+      if (d.id && url) domainMap[d.id] = url;
+    });
+  } catch(e) { /* optional */ }
+
+  try {
+    const fd = await apiFetch(tok, 'GET', '/funnels/funnel/list?locationId=' + locId + '&limit=100');
+    console.log('Funnels raw response:', Object.keys(fd), JSON.stringify(fd).slice(0,200));
+    funnels = fd.funnels || fd.data || fd.list || fd.items || [];
+    // Try to fetch domain directly by ID
+    const debugBox = document.getElementById('sfDebugBox');
+    const f0 = funnels[0] || {};
+    let domainById = null;
+    if (f0.domainId) {
+      try {
+        const dr = await apiFetch(tok, 'GET', '/locations/' + locId + '/domains/' + f0.domainId);
+        domainById = dr;
+        // If found, add to domainMap
+        const dUrl = (dr.domain || dr.url || dr.name || '').replace(/^https?:\/\//, '').replace(/\/$/, '');
+        if (dUrl) domainMap[f0.domainId] = dUrl;
+      } catch(e) {
+        // Try generic domain endpoint
+        try {
+          const dr2 = await apiFetch(tok, 'GET', '/domains/' + f0.domainId);
+          domainById = dr2;
+          const dUrl = (dr2.domain || dr2.url || dr2.name || '').replace(/^https?:\/\//, '').replace(/\/$/, '');
+          if (dUrl) domainMap[f0.domainId] = dUrl;
+        } catch(e2) { /* not found */ }
+      }
+    }
+    // Map domainId to CSV/saved domain for ALL funnels
+    funnels.forEach(f => {
+      if (f.domainId && !domainMap[f.domainId]) {
+        domainMap[f.domainId] = domainMap['_saved'] || domainMap['_csv'] || '';
+      }
+    });
+  } catch(e) { console.warn('Funnels error:', e.message); }
+
+  try {
+    const sd = await apiFetch(tok, 'GET', '/sites/?locationId=' + locId + '&limit=100');
+    sites = sd.sites || sd.data || sd.list || [];
+  } catch(e) { console.warn('Sites error:', e.message); }
+
+  let html = '';
+
+  // Funnels section
+  html += '<div class="sf-section">';
+  html += '<div class="sf-section-title">&#128249; Funnels (' + funnels.length + ')</div>';
+  if (!funnels.length) {
+    html += '<div class="sf-empty">No funnels found.</div>';
+  } else {
+    for (const f of funnels) {
+      // Steps come directly inside the funnel object
+      const steps = f.steps || [];
+      // Get domain: API map -> saved -> CSV -> funnel fields
+      const domain = domainMap[f.domainId] || domainMap['_saved'] || domainMap['_csv'] || f.domain || f.domainName || f.url || '';
+
+      const fId = f.id || f._id || '';
+      html += `<div class="sf-card" id="sf-${fId}">
+        <div class="sf-card-header" onclick="toggleSFCard('sf-${fId}')">
+          <div class="sf-card-name">${esc(f.name||f.title||'Unnamed')}</div>
+          <div class="sf-card-count">${steps.length} step${steps.length!==1?'s':''}</div>
+          <button class="copy-btn" style="flex-shrink:0;" onclick="event.stopPropagation();scanAllPages('${locId}','${fId}',this)">Scan All</button>
+          <button class="copy-btn" style="flex-shrink:0;" onclick="event.stopPropagation();copyTrackingScript(this)">Copy Script</button>
+          <div class="sf-card-toggle">&#9660;</div>
+        </div>
+        <div id="scan-status-${fId}" style="display:none;border-bottom:1px solid var(--border);"></div>
+        <div id="inject-status-${fId}" style="display:none;padding:6px 14px;font-size:11px;background:rgba(0,201,122,0.07);border-bottom:1px solid var(--border);"></div>
+        <div class="sf-pages">`;
+
+      if (!steps.length) {
+        html += '<div class="sf-empty">No steps found.</div>';
+      } else {
+        steps.forEach((step, idx) => {
+          const stepName = step.name || step.title || ('Step ' + (idx + 1));
+          // Build URL: https://DOMAIN/STEP_SLUG
+          // Step slug is the full path after the domain
+          const slug = step.slug || step.path || step.url || '';
+          let fullUrl = '';
+          if (slug.startsWith('http')) {
+            fullUrl = slug;
+          } else if (domain) {
+            const cleanDomain = domain.replace(/^https?:\/\//, '').replace(/\/$/, '');
+            const cleanSlug = slug.replace(/^\//, '');
+            fullUrl = 'https://' + cleanDomain + '/' + cleanSlug;
+          }
+
+          const stepSlug = slug.replace(/^\//, '');
+          html += `<div class="sf-page">
+            <div style="display:flex;align-items:center;gap:6px;flex:1;min-width:0;">
+              <span style="background:var(--accent);color:#fff;font-size:9px;font-weight:700;padding:2px 6px;border-radius:50px;flex-shrink:0;">${idx+1}</span>
+              <div class="sf-page-name">${esc(stepName)}</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+              ${fullUrl ? `<button class="copy-btn" style="border-color:var(--accent);color:var(--accent);" onclick="scanPageInFrame('${fullUrl}',this)">Scan</button>` : ''}
+              ${fullUrl
+                ? `<span class="sf-page-link" onclick="window.open('${fullUrl}','_blank')" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(fullUrl)}</span>
+                   <button class="copy-btn" onclick="copyLink('${fullUrl}',this)">Copy</button>`
+                : slug
+                  ? `<span style="color:var(--text2);font-size:11px;font-family:monospace;">/${esc(slug)}</span>`
+                  : '<span style="color:var(--text3);font-size:11px;">No URL</span>'
+              }
+            </div>
+          </div>
+          <div id="pstats-${esc(stepSlug)}" style="display:none;padding:8px 16px 8px 28px;background:var(--surface2);border-bottom:1px solid var(--border);font-size:11px;"></div>`;
+        });
+      }
+      html += '</div></div>';
+    }
+  }
+  html += '</div>';
+
+  // Sites section
+  html += '<div class="sf-section">';
+  html += '<div class="sf-section-title">&#127760; Websites (' + sites.length + ')</div>';
+  if (!sites.length) {
+    html += '<div class="sf-empty">No websites found.</div>';
+  } else {
+    sites.forEach(s => {
+      const url = s.url || s.domain || s.previewUrl || '';
+      html += `<div class="sf-card">
+        <div class="sf-card-header">
+          <div class="sf-card-name">${esc(s.name||s.title||'Unnamed')}</div>
+          ${url ? `<a class="sf-page-link" href="${esc(url.startsWith('http')?url:'https://'+url)}" target="_blank">${esc(url)}</a>` : ''}
+        </div>
+      </div>`;
+    });
+  }
+  html += '</div>';
+
+  content.innerHTML = html;
+  enableInjectBtn();
+  // Load scan results from extension if available
+  loadExtensionScanResults(locId);
+
+  // Add inject pixel button
+  const pixelBar = document.getElementById('sfPixelBar');
+  if (pixelBar) {
+    pixelBar.style.display = 'flex';
+    pixelBar.innerHTML = `
+      <div style="font-size:11px;color:var(--text2);">Domain: <strong>${esc(getDomain(locId)||'not set')}</strong></div>
+      ${getPixelForDomain(getDomain(locId)||'') ? 
+        '<span style="font-size:11px;color:var(--success);">Pixel: ' + (getPixelForDomain(getDomain(locId)||'')||{}).pixel + '</span>' :
+        '<span style="font-size:11px;color:var(--warning);">No pixel match for this domain</span>'
+      }
+      <button class="btn btn-sm" id="btnInjectPixel-${locId}" onclick="injectPixelToAllFunnels('${locId}')"
+        style="border-radius:50px;background:#1877F2;margin-left:auto;" 
+        ${getPixelForDomain(getDomain(locId)||'') ? '' : 'disabled'}>
+        Inject FB Pixel to All Funnels
+      </button>`;
+  }
+  const pixelStatus = document.getElementById('sfPixelStatus');
+  if (pixelStatus) { pixelStatus.style.display = 'none'; pixelStatus.innerHTML = ''; }
+}
+
+async function loadFunnelPages(tok, funnelId) {
+  try {
+    const data = await apiFetch(tok, 'GET', '/funnels/funnel/page?funnelId=' + funnelId + '&limit=100');
+    return data.pages || data.data || data.list || [];
+  } catch(e) { return []; }
+}
+
+function copyLink(url, btn) {
+  navigator.clipboard.writeText(url).then(() => {
+    btn.textContent = 'Copied!';
+    btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 1500);
+  }).catch(() => {
+    // Fallback
+    const ta = document.createElement('textarea');
+    ta.value = url;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    btn.textContent = 'Copied!';
+    btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 1500);
+  });
+}
+
+function toggleSFCard(id) {
+  const card = document.getElementById(id);
+  if (card) card.classList.toggle('open');
+}
+
+function addLog(type, msg) {
+  const box = document.getElementById('logBox');
+  const d = document.createElement('div');
+  d.className = 'log-line ' + type;
+  d.innerHTML = '<span class="ts">' + ts() + '</span><span class="msg">' + esc(msg) + '</span>';
+  box.appendChild(d);
+  box.scrollTop = box.scrollHeight;
+}
+
+
+// ── NAVIGATION ────────────────────────────────────────────────
+function nav(id) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('panel-' + id).classList.add('active');
+  const nb = document.getElementById('nav-' + id);
+  if (nb) nb.classList.add('active');
+  if (id === 'sf') buildSFTabs();
+  if (id === 'dash') loadDashboard();
+  if (id === 'auto') buildAutoTabs();
+}
+
+function exportFormLeads(exportIdx) {
+  const data = (window._exportList || [])[exportIdx];
+  if (!data) { showToast('No data — open the workflow first'); return; }
+  const { name, leads, cfDefs } = data;
+
+  // Get all unique custom field IDs across all leads
+  const cfIds = new Set();
+  leads.forEach(c => (c.customFields||[]).forEach(f => { if(f.id) cfIds.add(f.id); }));
+
+  // Build headers
+  const baseHeaders = ['First Name','Last Name','Email','Phone','Source','Date Added'];
+  const cfHeaders = [...cfIds].map(id => cfDefs[id] || id);
+  const allHeaders = [...baseHeaders, ...cfHeaders];
+
+  // Build rows
+  const rows = leads.map(c => {
+    const base = [
+      c.firstName || '',
+      c.lastName || '',
+      c.email || '',
+      c.phone || '',
+      c.source || '',
+      c.dateAdded || c.createdAt || ''
+    ];
+    const cfMap = {};
+    (c.customFields||[]).forEach(f => { if(f.id) cfMap[f.id] = f.value || ''; });
+    const cfVals = [...cfIds].map(id => cfMap[id] || '');
+    return [...base, ...cfVals];
+  });
+
+  // Build CSV
+  const escape = v => '"' + String(v||'').replace(/"/g,'""') + '"';
+  const nl = String.fromCharCode(10);
+  const csv = [allHeaders, ...rows].map(row => row.map(escape).join(',')).join(nl);
+
+  // Download
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name.replace(/[^a-z0-9]/gi,'_').slice(0,50) + '_leads.csv';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast('✓ Exported ' + leads.length + ' leads for "' + name + '"');
+}
+
+function showContactDebug(btn) {
+  const locId = btn.dataset.locid;
+  const tok = (window._autoToks || {})[locId] || '';
+  if (!tok) return;
+  apiFetch(tok, 'GET', '/contacts/?locationId=' + locId + '&limit=1&sortBy=date_added')
+    .then(data => {
+      const c = (data.contacts || data.data || [])[0];
+      if (!c) { alert('No contacts found'); return; }
+      const attr = c.attributionSource || {};
+      const fields = c.customFields || [];
+      let msg = '=== ATTRIBUTION SOURCE ===\n';
+      Object.entries(attr).forEach(([k,v]) => { if(v) msg += k + ': ' + v + '\n'; });
+      msg += '\n=== SOURCE ===\n' + (c.source||'none');
+      msg += '\n\n=== CUSTOM FIELDS ===\n';
+      fields.forEach(f => { msg += (f.id||f.fieldKey||'') + ': ' + (f.value||'') + '\n'; });
+      alert(msg);
+    }).catch(e => alert('Error: ' + e.message));
+}
+
+// ── CONNECT ───────────────────────────────────────────────────
+async function conectar() {
+  agencyToken = document.getElementById('agencyToken').value.trim();
+  companyId = document.getElementById('companyId').value.trim();
+  if (!agencyToken || !companyId) { showErr('err1','Please fill both fields.'); return; }
+  hideErr('err1');
+  localStorage.setItem('ghl_agency_token', agencyToken);
+  localStorage.setItem('ghl_company_id', companyId);
+  const btn = document.getElementById('btnConnect');
+  btn.innerHTML = '<span class="spinner"></span> Loading...';
+  btn.disabled = true;
+  try {
+    let locs = [], skip = 0;
+    while (true) {
+      const data = await apiFetch(agencyToken, 'GET', '/locations/search?companyId=' + companyId + '&skip=' + skip + '&limit=100');
+      const batch = data.locations || data.data || [];
+      locs = locs.concat(batch);
+      if (batch.length < 100) break;
+      skip += 100;
+    }
+    if (!locs.length) { showErr('err1','No sub-accounts found.'); return; }
+    allLocs = locs;
+    selected.clear();
+    renderLocs(locs);
+    document.getElementById('statusDot').classList.add('on');
+    document.getElementById('statusLbl').textContent = locs.length + ' sub-accounts';
+    const noTok = locs.filter(l => !getToken(l.id));
+    if (noTok.length && noTok.length < locs.length) {
+      const w = document.getElementById('warn1');
+      w.textContent = '⚠ ' + noTok.length + ' sub-account(s) without token';
+      w.style.display = 'block';
+    }
+    nav('accounts');
+  } catch(e) {
+    showErr('err1','Error: ' + e.message + ' — Make sure CORS extension is active (orange icon).');
+  } finally {
+    btn.innerHTML = 'Connect &amp; Load Sub-Accounts';
+    btn.disabled = false;
+  }
+}
+
+// ── RENDER LOCATIONS ─────────────────────────────────────────
+function renderLocs(list) {
+  const el = document.getElementById('locList');
+  if (!list.length) { el.innerHTML = '<div class="empty">No results</div>'; return; }
+  el.innerHTML = list.map(l => {
+    const tok = getToken(l.id);
+    return `<div class="loc-item ${selected.has(l.id)?'sel':''}" id="li-${l.id}">
+      <div class="loc-main" onclick="toggleLoc('${l.id}')">
+        <div class="chk"><span class="chk-mark">✓</span></div>
+        <div class="loc-info">
+          <div class="loc-name">${esc(l.name||l.businessName||l.id)}</div>
+          <div class="loc-id-txt">${esc(l.id)}</div>
+        </div>
+        <span class="tok-badge ${tok?'ok':'no'}" id="badge-${l.id}">${tok?'● Connected':'○ No Token'}</span>
+        <button class="btn btn-ghost btn-sm" style="margin-left:6px;" onclick="event.stopPropagation();toggleTokRow('${l.id}')">${tok?'Change':'Connect'}</button>
+      </div>
+      <div class="tok-expand" id="te-${l.id}">
+        <div class="tok-row" style="flex-wrap:wrap;gap:6px;">
+          <input class="tok-input" type="password" id="ti-${l.id}" placeholder="pit-... (sub-account token)" value="${esc(tok)}" autocomplete="off" style="flex:1;min-width:180px;">
+          <input class="tok-input" type="text" id="di-${l.id}" placeholder="Domain e.g. mysite.advancedbeautytreatments.com" value="${esc(getDomain(l.id))}" autocomplete="off" style="flex:1;min-width:180px;font-family:var(--font);">
+          <div style="font-size:10px;color:var(--text3);padding:2px 4px;width:100%;">Acuity Field: <strong style="color:var(--accent);">${getAcuityField(l.id) || 'Not found — check CSV'}</strong></div>
+          <button class="btn btn-sm" onclick="guardarToken(\'${l.id}\')">Save</button>
+          ${tok ? `<button class="btn btn-ghost btn-sm" onclick="removeToken(\'${l.id}\')">Remove</button>` : ''}
+        </div>
+      </div>
+      <div class="inline-cv-panel" id="inline-cv-${l.id}"></div>
+    </div>`;
+  }).join('');
+  updateSelCount();
+}
+
+function filterLocs(q) {
+  renderLocs(allLocs.filter(l =>
+    (l.name||l.businessName||'').toLowerCase().includes(q.toLowerCase()) ||
+    l.id.toLowerCase().includes(q.toLowerCase())
+  ));
+}
+
+function toggleLoc(id) {
+  selected.has(id) ? selected.delete(id) : selected.add(id);
+  const el = document.getElementById('li-' + id);
+  if (el) el.classList.toggle('sel', selected.has(id));
+  updateSelCount();
+}
+
+function selAll(val) {
+  allLocs.forEach(l => {
+    val ? selected.add(l.id) : selected.delete(l.id);
+    const el = document.getElementById('li-' + l.id);
+    if (el) el.classList.toggle('sel', val);
+  });
+  updateSelCount();
+}
+
+function selConnected() {
+  selected.clear();
+  allLocs.forEach(l => { if (getToken(l.id)) selected.add(l.id); });
+  allLocs.forEach(l => {
+    const el = document.getElementById('li-' + l.id);
+    if (el) el.classList.toggle('sel', selected.has(l.id));
+  });
+  updateSelCount();
+}
+
+function updateSelCount() {
+  const el = document.getElementById('selCount');
+  if (el) el.textContent = selected.size + ' selected';
+  const btn = document.getElementById('btnLoadCVs');
+  if (btn) btn.disabled = selected.size === 0;
+}
+
+function toggleTokRow(id) {
+  const el = document.getElementById('li-' + id);
+  if (el) el.classList.toggle('show-token');
+}
+
+function removeToken(id) {
+  const t = loadTokens(); delete t[id];
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(t));
+  selected.delete(id);
+  renderLocs(allLocs);
+}
+
+// ── SITES & FUNNELS ───────────────────────────────────────────
+async function loadPageStats(locId, slug, fullUrl, btn) {
+  const statsId = 'pstats-' + slug;
+  const statsEl = document.getElementById(statsId);
+  if (!statsEl) return;
+
+  // Toggle
+  if (statsEl.style.display !== 'none') {
+    statsEl.style.display = 'none';
+    btn.textContent = 'Stats';
+    return;
+  }
+
+  statsEl.style.display = 'block';
+  statsEl.innerHTML = '<span class="spinner"></span> Loading...';
+  btn.textContent = 'Hide';
+
+  const tok = getToken(locId);
+  if (!tok) { statsEl.innerHTML = 'No token'; return; }
+
+  try {
+    // Search contacts that have this URL in their attribution
+    let matches = [];
+    let total = 0;
+
+    // Load contacts and check attribution URL
+    for (let p = 1; p <= 5; p++) {
+      const d = await apiFetch(tok, 'GET', '/contacts/?locationId=' + locId + '&limit=100&sortBy=date_added&page=' + p);
+      const batch = d.contacts || d.data || [];
+      total = d.total || total;
+      
+      batch.forEach(c => {
+        const attr = c.attributionSource || {};
+        const pageUrl = attr.url || attr.pageUrl || attr.landingPage || attr.utmUrl || '';
+        const sessionSource = attr.sessionSource || '';
+        if (pageUrl.includes(slug) || sessionSource.includes(slug) || fullUrl && pageUrl.includes(fullUrl)) {
+          matches.push(c);
+        }
+      });
+      if (batch.length < 100) break;
+    }
+
+    // Group by source/campaign
+    const bySrc = {};
+    matches.forEach(c => {
+      const attr = c.attributionSource || {};
+      const src = attr.utmCampaign || attr.campaign || attr.utmSource || c.source || 'direct';
+      bySrc[src] = (bySrc[src] || 0) + 1;
+    });
+    const srcEntries = Object.entries(bySrc).sort((a,b)=>b[1]-a[1]);
+
+    if (!matches.length) {
+      statsEl.innerHTML = '<span style="color:var(--text3);">No contacts found with this page in attribution. The page may use a different tracking method.</span>';
+      return;
+    }
+
+    let html = `<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+      <span style="font-weight:700;color:var(--accent);">${matches.length} contacts</span>
+      <span style="color:var(--text3);">landed on this page</span>
+    </div>`;
+
+    if (srcEntries.length) {
+      html += '<div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:6px;">';
+      srcEntries.slice(0,6).forEach(([src, count]) => {
+        html += `<span style="background:var(--surface);border:1px solid var(--border);border-radius:50px;padding:2px 8px;font-size:10px;">
+          ${esc(src)}: <strong>${count}</strong>
+        </span>`;
+      });
+      html += '</div>';
+    }
+    statsEl.innerHTML = html;
+  } catch(e) {
+    statsEl.innerHTML = '<span style="color:var(--error);">Error: ' + esc(e.message) + '</span>';
+  }
+}
+
+function buildSFTabs() {
+  const tabs = document.getElementById('sfTabs');
+  // Only show SELECTED locations that have a token
+  const toShow = [...selected].filter(id => getToken(id));
+  if (!toShow.length) {
+    const msg = selected.size > 0 ? 'Selected accounts have no token — add tokens in Accounts first.' : 'Select sub-accounts in Accounts tab first.';
+    tabs.innerHTML = '<span style="font-size:12px;color:var(--text3);">' + msg + '</span>';
+    document.getElementById('sfContent').innerHTML = '<div style="padding:40px;text-align:center;font-size:12px;color:var(--text3);">No accounts to show</div>';
+    return;
+  }
+  tabs.innerHTML = toShow.map((id, i) => {
+    const l = allLocs.find(x => x.id === id);
+    const name = l ? (l.name || l.businessName || id) : id;
+    return `<div class="sf-tab ${i===0?'active':''}" onclick="selectSFTab('${id}',this)">${esc(name)}</div>`;
+  }).join('');
+  loadSF(toShow[0], tabs.firstChild);
+}
+
+function selectSFTab(locId, tabEl) {
+  document.querySelectorAll('#sfTabs .sf-tab').forEach(t => t.classList.remove('active'));
+  if (tabEl) tabEl.classList.add('active');
+  loadSF(locId, tabEl);
+}
+
+// ── HELPERS ───────────────────────────────────────────────────
+function showErr(id, msg) { const e=document.getElementById(id); if(e){e.textContent=msg;e.style.display='block';} }
+function hideErr(id) { const e=document.getElementById(id); if(e) e.style.display='none'; }
+
+// ── AUTO-CONNECT ──────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', async function() {
+  const t = localStorage.getItem('ghl_agency_token');
+  const c = localStorage.getItem('ghl_company_id');
+  if (t) document.getElementById('agencyToken').value = t;
+  if (c) document.getElementById('companyId').value = c;
+
+  // Try to load shared tokens/domains from artifact storage
+  try {
+    if (window.storage) {
+      const sharedTokens = await window.storage.get(STORAGE_KEY, true);
+      if (sharedTokens) {
+        const existing = loadTokens();
+        const merged = { ...JSON.parse(sharedTokens.value), ...existing };
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+      }
+      const sharedDomains = await window.storage.get(DOMAIN_KEY, true);
+      if (sharedDomains) {
+        const existing = loadDomains();
+        const merged = { ...JSON.parse(sharedDomains.value), ...existing };
+        localStorage.setItem(DOMAIN_KEY, JSON.stringify(merged));
+      }
+    }
+  } catch(e) {}
+
+  if (t && c) setTimeout(() => conectar(), 400);
+});
+
+</script>
+</script>
+</body>
+</html>
