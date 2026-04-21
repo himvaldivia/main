@@ -463,6 +463,15 @@ let cvData = {}, allCvKeys = [];
 const DOMAIN_KEY = 'ghl_loc_domains';
 function loadDomains() { try { return JSON.parse(localStorage.getItem(DOMAIN_KEY) || '{}'); } catch(e) { return {}; } }
 function saveDomain(id, domain) { const d = loadDomains(); d[id] = domain; localStorage.setItem(DOMAIN_KEY, JSON.stringify(d)); }
+const ACUITY_KEY = 'ghl_loc_acuity_fields';
+function loadSavedAcuityFields() { try { return JSON.parse(localStorage.getItem(ACUITY_KEY) || '{}'); } catch(e) { return {}; } }
+function saveAcuityField(id, field) {
+  const d = loadSavedAcuityFields();
+  const val = String(field || '').trim();
+  if (val) d[id] = val;
+  else delete d[id];
+  localStorage.setItem(ACUITY_KEY, JSON.stringify(d));
+}
 function getDomain(id) {
   // First check manually saved domain
   const saved = loadDomains()[id];
@@ -474,6 +483,222 @@ function getDomain(id) {
     if (csvDomain) return csvDomain;
   }
   return '';
+}
+
+function normalizeSpaName(name) {
+  return String(name || '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/&/g, ' and ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\b(medspa|med spa|spa|clinic|studio|beauty|aesthetic|aesthetics|cosmetic|cosmetics|wellness|limited|llc|inc)\b/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function getDomainForLoc(locOrId) {
+  const loc = typeof locOrId === 'object' ? locOrId : allLocs.find(l => l.id === locOrId);
+  const id = typeof locOrId === 'object' ? locOrId.id : locOrId;
+  const saved = loadDomains()[id];
+  if (saved) return saved;
+  if (!loc) return '';
+  const names = [loc.name, loc.businessName, loc.companyName, loc.alias].filter(Boolean);
+  for (const name of names) {
+    const csvDomain = getDomainFromCSV(name);
+    if (csvDomain) return csvDomain;
+  }
+  return cleanDomainValue(loc.domain || loc.domainName || loc.url || '');
+}
+
+function cleanDomainValue(domain) {
+  return (domain || '').replace(/^https?:\/\//, '').replace(/\/$/, '');
+}
+
+function buildStepUrl(step, domain) {
+  const slug = step.slug || step.path || step.url || '';
+  if (!slug) return '';
+  if (/^https?:\/\//i.test(slug)) return slug;
+  const cleanDomain = cleanDomainValue(domain);
+  if (!cleanDomain) return '';
+  const cleanSlug = String(slug).replace(/^\//, '');
+  return 'https://' + cleanDomain + (cleanSlug ? '/' + cleanSlug : '');
+}
+
+async function resolveFunnelDomain(locId, funnel, tok) {
+  const savedOrCsv = getDomainForLoc(locId) || '';
+  const direct = funnel.domain || funnel.domainName || funnel.url || funnel.previewUrl || '';
+  if (direct) return cleanDomainValue(direct);
+
+  if (funnel.domainId && tok) {
+    const domainId = funnel.domainId;
+    const domainEndpoints = [
+      '/locations/' + locId + '/domains/' + domainId,
+      '/domains/' + domainId
+    ];
+    for (const ep of domainEndpoints) {
+      try {
+        const dr = await apiFetch(tok, 'GET', ep);
+        const found = cleanDomainValue(dr.domain || dr.url || dr.name || '');
+        if (found) {
+          const saved = loadDomains();
+          saved[domainId] = found;
+          localStorage.setItem(DOMAIN_KEY, JSON.stringify(saved));
+          return found;
+        }
+      } catch(e) { /* try next fallback */ }
+    }
+  }
+
+  return cleanDomainValue(savedOrCsv);
+}
+
+function normalizeScanHtml(html) {
+  return String(html || '')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, '&');
+}
+
+function extractTrackingScanDetails(html) {
+  html = normalizeScanHtml(html);
+  const headMatch = html.match(/<head[^>]*>([\s\S]*?)<\/head>/i);
+  const bodyMatch = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+  const headContent = headMatch ? headMatch[1] : '';
+  const bodyContent = bodyMatch ? bodyMatch[1] : '';
+  const whole = headContent + '\n' + bodyContent + '\n' + html;
+  const hasExactUtmScript = whole.includes('user_ip_address') ||
+    whole.includes('full_url_utm') ||
+    whole.includes('buildfbc') ||
+    whole.includes('api.ipify.org?format=json') ||
+    whole.includes('window.location.replace(url.toString())');
+
+  const scriptTags = [];
+  let sm; const scriptRe = /<script[^>]*>([\s\S]*?)<\/script>/gi;
+  while ((sm = scriptRe.exec(whole)) !== null) {
+    const sc = sm[1].trim();
+    if (
+      sc.length > 10 &&
+      (sc.includes('fbq(') || sc.includes('fbevents') || sc.includes('user_ip_address') ||
+       sc.includes('full_url_utm') || sc.includes('buildfbc') || sc.includes('api.ipify.org') ||
+       sc.includes('fbclid') || sc.includes('ACUITY_FIELD_ID') || sc.includes('acuityscheduling.com') ||
+       sc.includes('MARKETING DATA TRACKER'))
+    ) {
+      scriptTags.push(sc.slice(0, 900));
+    }
+  }
+
+  const footerMatch = bodyContent.match(/(<footer[\s\S]*?<\/footer>)/i);
+  const footerContent = footerMatch ? footerMatch[1] : bodyContent.slice(Math.max(0, bodyContent.length - 5000));
+  const footerScripts = [];
+  let fm; const footerScriptRe = /<script[^>]*>([\s\S]*?)<\/script>/gi;
+  while ((fm = footerScriptRe.exec(footerContent)) !== null) {
+    const sc = fm[1].trim();
+    if (sc.length > 10) footerScripts.push(sc.slice(0, 1200));
+  }
+
+  const pixelMatch = whole.match(/fbq\('init',\s*['"]?(\d+)['"]?\)/);
+  const acuityMatch = whole.match(/ACUITY_FIELD_ID\s*=\s*['"]([^'"]+)['"]/);
+
+  return {
+    headContent,
+    bodyContent,
+    hasPixel: whole.includes('fbq(') || whole.includes('fbevents.js') || whole.includes('Meta Pixel'),
+    hasUTM: hasExactUtmScript,
+    pixelId: pixelMatch ? pixelMatch[1] : '',
+    hasFooterScript: whole.includes('MARKETING DATA TRACKER') || whole.includes('acuityscheduling.com') || whole.includes('ACUITY_FIELD_ID'),
+    foundAcuityField: acuityMatch ? acuityMatch[1] : '',
+    codeSnippet: scriptTags.join('\n\n---\n\n').slice(0, 2500),
+    footerSnippet: footerScripts.join('\n\n---\n\n').slice(0, 2500)
+  };
+}
+
+function isFormStep(step) {
+  const text = [
+    step.name || '',
+    step.title || '',
+    step.slug || '',
+    step.path || '',
+    step.url || ''
+  ].join(' ').toLowerCase();
+  return text.includes('form');
+}
+
+function isBookingStep(step) {
+  const text = [
+    step.name || '',
+    step.title || '',
+    step.slug || '',
+    step.path || '',
+    step.url || ''
+  ].join(' ').toLowerCase();
+  return text.includes('booking') || text.includes('book');
+}
+
+function getExpectedScanCode(locId, domain, expectedPixel, includeUTM, includeFooter) {
+  const footer = getFooterScript(locId);
+  const head = '<script>\n' + TRACKING_SCRIPT + '\n</' + 'script>';
+  const pixel = expectedPixel ? expectedPixel.code : '';
+  return [
+    pixel ? 'EXPECTED FB PIXEL CODE:\n' + pixel : '',
+    includeUTM ? 'EXPECTED FORM PAGE HEAD UTM CODE:\n' + head : '',
+    includeFooter ? 'EXPECTED BOOKING PAGE FOOTER/BODY ACUITY CODE:\n' + footer : ''
+  ].filter(Boolean).join('\n\n==============================\n\n');
+}
+
+async function fetchPageHtmlForScan(url) {
+  const urlsToTry = [
+    url,
+    'https://api.allorigins.win/raw?url=' + encodeURIComponent(url),
+    'https://corsproxy.io/?' + encodeURIComponent(url),
+    'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(url)
+  ];
+
+  let lastErr = '';
+  for (const tryUrl of urlsToTry) {
+    try {
+      const resp = await fetch(tryUrl, { cache: 'no-store', credentials: 'omit' });
+      if (!resp.ok) { lastErr = 'HTTP ' + resp.status; continue; }
+      const html = await resp.text();
+      if (html && html.length > 100) return { html, source: tryUrl === url ? 'live page' : 'proxy' };
+    } catch(e) {
+      lastErr = e.message;
+    }
+  }
+  return { html: '', source: '', error: lastErr || 'Could not read page' };
+}
+
+async function fetchStepConfiguredCode(tok, locId, step) {
+  const stepHead = step.headCode || step.headerCode || step.head || step.customHeadCode || '';
+  const stepBody = step.bodyCode || step.footerCode || step.body || step.customBodyCode || step.customFooterCode || '';
+  if (stepHead || stepBody) {
+    return { html: '<head>' + stepHead + '</head><body>' + stepBody + '</body>', source: 'GHL step settings' };
+  }
+
+  const pageId = step.id || step._id || step.pageId;
+  if (!pageId) return { html: '', source: '', error: 'No page id' };
+
+  const endpoints = [
+    '/funnels/funnel/page/' + pageId + '?locationId=' + locId,
+    '/funnels/page/' + pageId + '?locationId=' + locId
+  ];
+
+  let lastErr = '';
+  for (const ep of endpoints) {
+    try {
+      const pg = await apiFetch(tok, 'GET', ep);
+      const page = pg.page || pg.data || pg;
+      const head = page.headCode || page.headerCode || page.head || page.customHeadCode || '';
+      const body = page.bodyCode || page.footerCode || page.body || page.customBodyCode || page.customFooterCode || '';
+      const html = '<head>' + head + '</head><body>' + body + '</body>';
+      if ((head || body) && html.length > 40) return { html, source: 'GHL page settings' };
+    } catch(e) {
+      lastErr = e.message;
+    }
+  }
+
+  return { html: '', source: '', error: lastErr || 'No configured code found' };
 }
 
 // Pre-loaded domain map from CSV (name -> domain)
@@ -564,10 +789,36 @@ function getDomainFromCSV(locName) {
   for (const [k, v] of Object.entries(CSV_DOMAINS)) {
     if (n.includes(k.toLowerCase()) || k.toLowerCase().includes(n)) return v;
   }
+  const nn = normalizeSpaName(locName);
+  if (!nn) return '';
+  for (const [k, v] of Object.entries(CSV_DOMAINS)) {
+    const nk = normalizeSpaName(k);
+    if (nk && (nn === nk || nn.includes(nk) || nk.includes(nn))) return v;
+  }
   return '';
 }
 
 function loadTokens() { try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); } catch(e) { return {}; } }
+
+function contactTextBlob(c, cfDefs) {
+  const parts = [
+    c.firstName, c.lastName, c.name, c.email, c.phone, c.source,
+    c.contactName, c.fullName, c.companyName
+  ];
+  const attr = c.attributionSource || {};
+  Object.values(attr).forEach(v => parts.push(v));
+  (c.tags || []).forEach(t => parts.push(typeof t === 'string' ? t : (t.name || t.tag || '')));
+  (c.customFields || []).forEach(f => {
+    parts.push(f.value);
+    parts.push(cfDefs ? (cfDefs[f.id] || f.fieldKey || '') : (f.fieldKey || f.id || ''));
+  });
+  return parts.filter(Boolean).join(' ').toLowerCase();
+}
+
+function isConvertedLead(c, cfDefs) {
+  const blob = contactTextBlob(c, cfDefs);
+  return /\b(booked|booking|appointment|appt|scheduled|consultation|confirmed|showed|won|customer|client|paid|deposit|converted)\b/i.test(blob);
+}
 
 // ── AUTOMATIONS ───────────────────────────────────────────────
 function buildAutoTabs() {
@@ -663,6 +914,70 @@ function selectAutoTab(locId, tabEl) {
   loadAuto(locId, tabEl);
 }
 
+async function searchAutomationLeads(locId, btn) {
+  const tok = getToken(locId);
+  const input = document.getElementById('autoLeadSearch-' + locId);
+  const box = document.getElementById('autoLeadResults-' + locId);
+  const q = input ? input.value.trim().toLowerCase() : '';
+  if (!tok || !box) return;
+  if (!q) { box.style.display = 'block'; box.innerHTML = '<div style="font-size:12px;color:var(--warning);">Type something to search.</div>'; return; }
+
+  const orig = btn.textContent;
+  btn.textContent = '...';
+  btn.disabled = true;
+  box.style.display = 'block';
+  box.innerHTML = '<div style="font-size:12px;color:var(--text2);"><span class="spinner"></span> Searching leads...</div>';
+
+  try {
+    const cfDefs = {};
+    try {
+      const cfd = await apiFetch(tok, 'GET', '/locations/' + locId + '/customFields');
+      (cfd.customFields || cfd.data || []).forEach(f => { if (f.id) cfDefs[f.id] = f.name || f.fieldKey || f.id; });
+    } catch(e) {}
+
+    const contacts = [];
+    for (let p = 1; p <= 10; p++) {
+      try {
+        const d = await apiFetch(tok, 'GET', '/contacts/?locationId=' + locId + '&limit=100&sortBy=date_added&page=' + p);
+        const batch = d.contacts || d.data || [];
+        contacts.push(...batch);
+        if (batch.length < 100) break;
+      } catch(e) { break; }
+      await sleep(80);
+    }
+
+    const matches = contacts.filter(c => contactTextBlob(c, cfDefs).includes(q)).slice(0, 50);
+    if (!matches.length) {
+      box.innerHTML = '<div style="font-size:12px;color:var(--text3);">No leads found for "' + esc(q) + '".</div>';
+      return;
+    }
+
+    let html = '<div style="font-size:11px;color:var(--text3);margin-bottom:6px;">' + matches.length + ' match(es)</div>';
+    html += '<div style="max-height:280px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;background:var(--surface2);">';
+    matches.forEach(c => {
+      const name = [c.firstName, c.lastName].filter(Boolean).join(' ') || c.name || c.email || c.phone || 'Unknown';
+      const created = (c.dateAdded || c.createdAt) ? new Date(c.dateAdded || c.createdAt).toLocaleDateString() : '';
+      const converted = isConvertedLead(c, cfDefs);
+      html += `<div style="display:flex;gap:8px;align-items:center;padding:7px 10px;border-bottom:1px solid var(--border);font-size:11px;">
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:700;color:var(--text);">${esc(name)}</div>
+          <div style="color:var(--text3);">${esc([c.email,c.phone].filter(Boolean).join(' · ') || 'No email/phone')}</div>
+        </div>
+        ${c.source ? '<span style="font-size:10px;color:var(--accent);">'+esc(c.source)+'</span>' : ''}
+        <span style="font-size:10px;color:${converted?'var(--success)':'var(--text3)'};">${converted?'Converted':'Lead'}</span>
+        <span style="font-size:10px;color:var(--text3);">${created}</span>
+      </div>`;
+    });
+    html += '</div>';
+    box.innerHTML = html;
+  } catch(e) {
+    box.innerHTML = '<div style="font-size:12px;color:var(--error);">Error: ' + esc(e.message) + '</div>';
+  } finally {
+    btn.textContent = orig;
+    btn.disabled = false;
+  }
+}
+
 async function loadAuto(locId) {
   const el = document.getElementById('autoContent');
   el.innerHTML = '<div style="padding:20px;font-size:12px;color:var(--text2);"><span class="spinner"></span> Loading workflows...</div>';
@@ -679,7 +994,14 @@ async function loadAuto(locId) {
   if (!workflows.length) { el.innerHTML = '<div class="empty">No workflows found.</div>'; return; }
   window._autoToks = window._autoToks || {};
   window._autoToks[locId] = tok;
-  let html = '<div style="display:flex;flex-direction:column;gap:8px;">';
+  let html = `<div style="background:var(--surface);border:1.5px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:10px;">
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+      <input class="search-box" id="autoLeadSearch-${locId}" type="text" placeholder="Search lead by name, email, phone, campaign..." style="flex:1;min-width:260px;">
+      <button class="btn btn-sm" onclick="searchAutomationLeads('${locId}',this)">Search Lead</button>
+    </div>
+    <div id="autoLeadResults-${locId}" style="display:none;margin-top:8px;"></div>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:8px;">`;
   workflows.forEach((wf, wi) => {
     const name = wf.name || wf.title || 'Unnamed';
     const status = wf.status || wf.workflowStatus || 'unknown';
@@ -911,7 +1233,7 @@ function getFooterScript(locId) {
     '<scr'+'ipt>',
     '(function() {',
     "  'use strict';",
-    "  const ACUITY_FIELD_ID = '" + "' + field + '",
+    "  const ACUITY_FIELD_ID = '" + field + "';",
     "  const STORAGE_KEY = 'marketing_json_store';",
     "  function getBaseUrl(url) { if (!url) return ''; return url.split('?')[0]; }",
     "  function getUrlParams() { const p={}; new URLSearchParams(window.location.search).forEach((v,k)=>{ if(k!=='full_url_utm'&&k!=='referrer') p[k]=v; }); return p; }",
@@ -938,32 +1260,78 @@ function getFooterScript(locId) {
 }
 
 
-const TRACKING_SCRIPT = `(async () => {
-  try {
-    const ipPromise = fetch('https://api.ipify.org?format=json').then(r=>r.json()).then(j=>j.ip).catch(()=>'');
-    const getCookie = (name) => { const m = document.cookie.match(new RegExp('(?:^|; )' + name.replace(/([.$?*|{}()[\\]\\/+^])/g,'\\\\$1') + '=([^;]*)')); return m ? decodeURIComponent(m[1]) : ''; };
-    const delay = (ms) => new Promise(r => setTimeout(r, ms));
-    const url = new URL(window.location.href);
-    if (!url.searchParams.has('user_ip_address')) {
-      const fbclid = url.searchParams.get('fbclid') || '';
-      const readCookies = () => ({ fbc: getCookie('_fbc') || getCookie('fbc') || '', fbp: getCookie('_fbp') || getCookie('fbp') || '' });
-      let { fbc, fbp } = readCookies();
-      if (fbclid && !(fbc && fbc.endsWith('.' + fbclid))) {
-        const start = Date.now();
-        while (Date.now() - start < 800) { await delay(80); const now = readCookies(); if (now.fbc) fbc = now.fbc; if (now.fbp) fbp = now.fbp; if (now.fbc && now.fbc.endsWith('.' + fbclid)) break; }
-      }
-      const ip = await ipPromise;
-      url.searchParams.set('user_ip_address', ip);
-      url.searchParams.set('user_agent', navigator.userAgent);
-      if (fbc) url.searchParams.set('fbc', fbc);
-      if (fbp) url.searchParams.set('fbp', fbp);
-      url.searchParams.set('buildfbc', 'fb.1.' + Date.now() + '.' + (fbclid || (Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2))));
-      const finalWithoutFull = url.toString();
-      url.searchParams.set('full_url_utm', finalWithoutFull);
-      window.location.replace(url.toString());
-    }
-  } catch(err) { console.error('Error adding params:', err); }
-})();`;
+const TRACKING_SCRIPT = [
+  '(async () => {',
+  '  try {',
+  '    // Fetch IP in parallel',
+  "    const ipPromise = fetch('https://api.ipify.org?format=json')",
+  '      .then(r => r.json())',
+  '      .then(j => j.ip)',
+  "      .catch(() => '');",
+  '',
+  '    const getCookie = (name) => {',
+  '      const m = document.cookie.match(',
+  "        new RegExp('(?:^|; )' + name.replace(/([.$?*|{}()[\\\\]\\\\/+^])/g, '\\\\\\\\$1') + '=([^;]*)')",
+  '      );',
+  "      return m ? decodeURIComponent(m[1]) : '';",
+  '    };',
+  '',
+  '    const delay = (ms) => new Promise(r => setTimeout(r, ms));',
+  '',
+  '    const url = new URL(window.location.href);',
+  '',
+  '    // Run once guard',
+  "    if (!url.searchParams.has('user_ip_address')) {",
+  "      const fbclid = url.searchParams.get('fbclid') || '';",
+  '',
+  '      const readCookies = () => ({',
+  "        fbc: getCookie('_fbc') || getCookie('fbc') || '',",
+  "        fbp: getCookie('_fbp') || getCookie('fbp') || ''",
+  '      });',
+  '',
+  '      let { fbc, fbp } = readCookies();',
+  '',
+  "      // If fbclid present but _fbc doesn't match yet, wait briefly for a fresh cookie",
+  "      if (fbclid && !(fbc && fbc.endsWith('.' + fbclid))) {",
+  '        const maxWaitMs = 800;   // keep short',
+  '        const intervalMs = 80;',
+  '        const start = Date.now();',
+  '        while (Date.now() - start < maxWaitMs) {',
+  '          await delay(intervalMs);',
+  '          const now = readCookies();',
+  '          if (now.fbc) fbc = now.fbc; // keep latest seen cookie values',
+  '          if (now.fbp) fbp = now.fbp;',
+  '',
+  "          if (now.fbc && now.fbc.endsWith('.' + fbclid)) {",
+  '            break; // matched the current fbclid',
+  '          }',
+  '        }',
+  '      }',
+  '',
+  '      const ip = await ipPromise;',
+  '',
+  '      // Add only cookie-derived values',
+  "      url.searchParams.set('user_ip_address', ip);",
+  "      url.searchParams.set('user_agent', navigator.userAgent);",
+  "      if (fbc) url.searchParams.set('fbc', fbc);",
+  "      if (fbp) url.searchParams.set('fbp', fbp);",
+  '',
+  '      // Dev-only reference; never used as fallback',
+  "      url.searchParams.set('buildfbc', `fb.1.${Date.now()}.${fbclid || (Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2))}`);",
+  '',
+  '      // Snapshot before embedding',
+  '      const finalWithoutFull = url.toString();',
+  '',
+  '      // Embed full URL (encoded once by URLSearchParams)',
+  "      url.searchParams.set('full_url_utm', finalWithoutFull);",
+  '',
+  '      window.location.replace(url.toString());',
+  '    }',
+  '  } catch (err) {',
+  "    console.error('Error adding params:', err);",
+  '  }',
+  '})();'
+].join('\n');
 
 function enableInjectBtn() {
   const btn = document.getElementById('btnInjectScript');
@@ -1094,170 +1462,115 @@ async function saveFunnelSettings(locId, funnelId) {
 }
 
 
-async function scanAllPages(locId, funnelId, btn) {
+async function scanAllPages(locId, funnelId, btn, forceRun) {
   const scanEl = document.getElementById('scan-status-' + funnelId);
   if (!scanEl) return;
 
-  if (scanEl.style.display !== 'none') {
+  if (!forceRun && scanEl.style.display !== 'none') {
     scanEl.style.display = 'none';
     btn.textContent = 'Scan All';
     return;
   }
 
+  const card = document.getElementById('sf-' + funnelId);
+  const scanButtons = card ? Array.from(card.querySelectorAll('.sf-scan-btn')) : [];
+  if (!scanButtons.length) {
+    scanEl.style.display = 'block';
+    scanEl.innerHTML = '<div style="padding:10px 16px;font-size:12px;color:var(--warning);">No page Scan buttons found in this funnel.</div>';
+    return { total: 0, ok: 0, bad: 0, blocked: 0, unknown: 0 };
+  }
+
   btn.textContent = '...';
   btn.disabled = true;
   scanEl.style.display = 'block';
-  scanEl.innerHTML = '<div style="padding:10px 16px;font-size:12px;"><span class="spinner"></span> Loading funnel...</div>';
+  scanEl.innerHTML = '<div style="padding:10px 16px;font-size:12px;"><span class="spinner"></span> Running individual scans 0/' + scanButtons.length + '...</div>';
 
   try {
-    const tok = getToken(locId);
-    const fd = await apiFetch(tok, 'GET', '/funnels/funnel/list?locationId=' + locId + '&limit=100');
-    const funnels = fd.funnels || fd.data || fd.list || fd.items || [];
-    const funnel = funnels.find(f => (f.id||f._id) === funnelId);
-    if (!funnel) { scanEl.innerHTML = '<div style="padding:10px;color:var(--error);">Funnel not found</div>'; return; }
-
-    const steps = funnel.steps || [];
-    const domain = getDomain(locId) || '';
-    const expectedPixel = getPixelForDomain(domain);
     const results = [];
 
-    scanEl.innerHTML = '<div style="padding:10px 16px;font-size:12px;"><span class="spinner"></span> Scanning ' + steps.length + ' pages...</div>';
-
-    for (let si = 0; si < steps.length; si++) {
-      const step = steps[si];
-      const stepName = step.name || step.title || 'Page ' + (si+1);
-      const slug = (step.slug || step.path || '').replace(/^\//, '');
-      const fullUrl = domain && slug ? 'https://' + domain.replace(/^https?:\/\//, '') + '/' + slug : '';
-
-      let hasPixel = false, hasUTM = false, pixelId = '', status = 'no_url', errorMsg = '', hasFooterScript = false, headSnippet = '', foundAcuityField = '';
-
-      if (fullUrl) {
-        scanEl.innerHTML = '<div style="padding:10px 16px;font-size:12px;"><span class="spinner"></span> Scanning page ' + (si+1) + '/' + steps.length + ': ' + esc(stepName) + '</div>';
-        // Try direct fetch first, then proxies
-        const urlsToTry = [
-          fullUrl,
-          'https://corsproxy.io/?' + encodeURIComponent(fullUrl),
-          'https://api.allorigins.win/raw?url=' + encodeURIComponent(fullUrl),
-        ];
-        for (const tryUrl of urlsToTry) {
-          try {
-            const resp = await fetch(tryUrl, { cache: 'no-store' });
-            if (!resp.ok) { status = 'error'; errorMsg = 'HTTP ' + resp.status; continue; }
-            const html = await resp.text();
-            if (!html || html.length < 200) continue;
-            hasPixel = html.includes('fbq(') || html.includes('fbevents.js') || html.includes('Meta Pixel');
-            hasUTM = html.includes('user_ip_address') || html.includes('fbclid');
-            // FB Pixel
-            hasPixel = html.includes('fbq(') || html.includes('fbevents.js') || html.includes('Meta Pixel');
-            const pm = html.match(/fbq\('init',\s*['"]?(\d+)['"]?\)/);
-            pixelId = pm ? pm[1] : '';
-
-            // UTM Script
-            hasUTM = html.includes('user_ip_address') || html.includes('fbclid');
-
-            // Footer/Body: Marketing Data Tracker + Acuity Field
-            hasFooterScript = html.includes('MARKETING DATA TRACKER') || html.includes('acuityscheduling.com');
-            const acuityMatch = html.match(/ACUITY_FIELD_ID\s*=\s*['"]([^'"]+)['"]/);
-            foundAcuityField = acuityMatch ? acuityMatch[1] : '';
-
-            // Head snippet (scripts only)
-            const hm = html.match(/<head[^>]*>([\s\S]*?)<\/head>/i);
-            const headRaw = hm ? hm[1] : '';
-            // Extract script tags content
-            const scriptTags = [];
-            let sm; const scriptRe = /<script[^>]*>([\s\S]*?)<\/script>/gi;
-            while ((sm = scriptRe.exec(headRaw)) !== null) {
-              const sc = sm[1].trim();
-              if (sc.length > 10) scriptTags.push(sc.slice(0,150));
-            }
-            headSnippet = scriptTags.join('\n---\n').slice(0,500);
-            status = 'ok';
-            break;
-          } catch(e) {
-            status = 'cors';
-            errorMsg = e.message;
-          }
-        }
-        await sleep(400);
-      }
-
-      results.push({ stepName, fullUrl, hasPixel, hasUTM, pixelId, status, errorMsg, hasFooterScript, headSnippet, foundAcuityField });
+    for (let i = 0; i < scanButtons.length; i++) {
+      const pageName = scanButtons[i].dataset.name || 'Page ' + (i + 1);
+      scanEl.innerHTML = '<div style="padding:10px 16px;font-size:12px;"><span class="spinner"></span> Running individual scans ' + (i + 1) + '/' + scanButtons.length + ': ' + esc(pageName) + '</div>';
+      const res = await scanPageInFrame(
+        scanButtons[i].dataset.url,
+        scanButtons[i],
+        locId,
+        scanButtons[i].dataset.form === 'true',
+        scanButtons[i].dataset.footer === 'true',
+        true
+      );
+      results.push(res || { ok: false, status: 'error', pageName, error: 'No result returned' });
+      await sleep(200);
     }
 
-    // Build results
-    const withPixel = results.filter(r => r.hasPixel).length;
-    const withUTM = results.filter(r => r.hasUTM).length;
-    const scanned = results.filter(r => r.status === 'ok').length;
-    const blocked = results.filter(r => r.status === 'cors' || r.status === 'error').length;
-
-    const knownPixels = {
-      '1180664739949233': 'First Touch Beauty',
-      '540031443835405': 'No Needle Needed',
-      '819221296693583': 'Adv Beauty Treatments'
-    };
-
-    let html = `<div style="padding:8px 16px;background:var(--surface2);border-bottom:1px solid var(--border);display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-      <span style="font-size:12px;font-weight:700;">Results</span>
-      ${scanned > 0 ? '<span style="background:var(--success);color:#fff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:50px;">'+withPixel+'/'+scanned+' pixel</span>' : ''}
-      ${scanned > 0 ? '<span style="background:#1877F2;color:#fff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:50px;">'+withUTM+'/'+scanned+' UTM</span>' : ''}
-      ${blocked > 0 ? '<span style="background:var(--warning);color:#fff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:50px;">'+blocked+' blocked</span>' : ''}
+    const ok = results.filter(r => r && r.ok).length;
+    const bad = results.filter(r => r && r.status === 'bad').length;
+    const blocked = results.filter(r => r && r.status === 'blocked').length;
+    const unknown = results.length - ok - bad - blocked;
+    scanEl.innerHTML = `<div style="padding:8px 16px;background:var(--surface2);border-bottom:1px solid var(--border);display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+      <span style="font-size:12px;font-weight:700;">Scan All ran ${results.length} individual scan${results.length!==1?'s':''}</span>
+      <span style="background:var(--success);color:#fff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:50px;">${ok} correct</span>
+      ${bad ? '<span style="background:var(--error);color:#fff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:50px;">'+bad+' incorrect</span>' : ''}
+      ${blocked ? '<span style="background:var(--warning);color:#fff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:50px;">'+blocked+' blocked</span>' : ''}
+      ${unknown ? '<span style="background:var(--surface);color:var(--text3);border:1px solid var(--border);font-size:11px;font-weight:700;padding:2px 8px;border-radius:50px;">'+unknown+' unknown</span>' : ''}
+      <span style="font-size:10px;color:var(--text3);">Details are shown under each page row.</span>
     </div>`;
-
-    const expectedAcuityField = getAcuityField(locId);
-    let si = 0;
-    results.forEach(r => {
-      const wrongPixel = r.pixelId && expectedPixel && r.pixelId !== expectedPixel.pixel;
-      const brand = knownPixels[r.pixelId] || '';
-
-      const rowId = 'scanrow-' + funnelId + '-' + si;
-      html += `<div style="padding:7px 16px;border-bottom:1px solid var(--border);font-size:11px;">
-        <div style="display:flex;align-items:center;gap:8px;">
-          <span style="color:${r.status==='ok'?(r.hasPixel?'var(--success)':'var(--error)'):'var(--text3)'};font-weight:700;font-size:13px;flex-shrink:0;">
-            ${r.status==='ok' ? (r.hasPixel?'✓':'✗') : '?'}
-          </span>
-          <div style="flex:1;min-width:0;">
-            <div style="font-weight:600;margin-bottom:3px;">${esc(r.stepName)}</div>
-            ${r.status === 'ok' ? `
-              <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:3px;">
-                ${r.hasPixel
-                  ? '<span style="background:rgba(24,119,242,0.1);color:#1877F2;padding:1px 7px;border-radius:50px;font-size:10px;">Pixel: '+r.pixelId+(brand?' ('+brand+')':'')+'</span>'
-                  : '<span style="background:rgba(255,59,92,0.1);color:var(--error);padding:1px 7px;border-radius:50px;font-size:10px;">No FB Pixel</span>'}
-                ${r.hasUTM
-                  ? '<span style="background:rgba(0,201,122,0.1);color:var(--success);padding:1px 7px;border-radius:50px;font-size:10px;">✓ UTM Script</span>'
-                  : '<span style="background:rgba(255,59,92,0.1);color:var(--error);padding:1px 7px;border-radius:50px;font-size:10px;">No UTM Script</span>'}
-                ${r.hasFooterScript
-                  ? `<span style="background:rgba(0,201,122,0.1);color:var(--success);padding:1px 7px;border-radius:50px;font-size:10px;">✓ Footer Script</span>
-                     ${r.foundAcuityField
-                       ? '<span style="background:rgba(24,119,242,0.1);color:#1877F2;padding:1px 7px;border-radius:50px;font-size:10px;">Acuity: '+esc(r.foundAcuityField)+'</span>'
-                       : ''}
-                     ${r.foundAcuityField && expectedAcuityField && r.foundAcuityField === expectedAcuityField
-                       ? '<span style="background:rgba(0,201,122,0.1);color:var(--success);padding:1px 7px;border-radius:50px;font-size:10px;">✓ Acuity Match</span>'
-                       : r.foundAcuityField && expectedAcuityField
-                         ? '<span style="background:rgba(255,170,0,0.1);color:var(--warning);padding:1px 7px;border-radius:50px;font-size:10px;">⚠ Acuity mismatch! Expected '+esc(expectedAcuityField)+'</span>'
-                         : ''}`
-                  : '<span style="background:rgba(255,59,92,0.1);color:var(--error);padding:1px 7px;border-radius:50px;font-size:10px;">✗ No Footer Script</span>'}
-                ${wrongPixel ? '<span style="background:rgba(255,170,0,0.1);color:var(--warning);padding:1px 7px;border-radius:50px;font-size:10px;">⚠ Wrong pixel!</span>' : ''}
-              </div>
-              <button onclick="toggleScanDetail('${rowId}')" style="background:none;border:1px solid var(--border2);color:var(--text3);font-size:10px;padding:1px 7px;border-radius:50px;cursor:pointer;font-family:var(--font);">View code details</button>
-              <div id="${rowId}" style="display:none;margin-top:6px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px;font-size:11px;line-height:1.6;color:var(--text2);">
-                <div style="font-weight:700;margin-bottom:4px;font-size:10px;text-transform:uppercase;color:var(--text3);">Head Scripts Found:</div>
-                <pre style="font-family:monospace;font-size:10px;white-space:pre-wrap;max-height:100px;overflow-y:auto;margin:0;">${esc(r.headSnippet||'(empty or could not read)')}</pre>
-                ${r.foundAcuityField ? '<div style="margin-top:6px;font-size:10px;"><strong>Acuity Field in page:</strong> '+esc(r.foundAcuityField)+'</div>' : ''}
-                ${r.foundAcuityField && expectedAcuityField ? '<div style="font-size:10px;color:'+(r.foundAcuityField===expectedAcuityField?'var(--success)':'var(--warning)')+'"><strong>Expected for this spa:</strong> '+esc(expectedAcuityField)+(r.foundAcuityField===expectedAcuityField?' ✓ Match':' ⚠ Mismatch')+'</div>' : ''}
-              </div>`
-            : `<span style="color:var(--text3);font-size:10px;">${r.status==='cors'?'CORS blocked':r.errorMsg||'No URL'}</span>`}
-          </div>
-          ${r.fullUrl ? '<a href="'+esc(r.fullUrl)+'" target="_blank" style="font-size:10px;color:var(--accent);flex-shrink:0;">↗</a>' : ''}
-        </div>
-      </div>`;
-      si++;
-    });
-
-    scanEl.innerHTML = html;
+    return { total: results.length, ok, bad, blocked, unknown };
   } catch(e) {
     scanEl.innerHTML = '<div style="padding:10px 16px;font-size:12px;color:var(--error);">Error: ' + esc(e.message) + '</div>';
+    return { total: 0, ok: 0, bad: 0, blocked: 1, unknown: 0 };
   } finally {
     btn.textContent = 'Scan All';
+    btn.disabled = false;
+  }
+}
+
+async function superScanAllFunnels(locId, btn) {
+  const allBtns = Array.from(document.querySelectorAll('#sfContent .sf-scan-all-btn'));
+  const statusEl = document.getElementById('sfPixelStatus');
+  if (!allBtns.length) {
+    showToast('No Scan All buttons found');
+    return;
+  }
+
+  const orig = btn.textContent;
+  btn.textContent = 'Super...';
+  btn.disabled = true;
+  if (statusEl) {
+    statusEl.style.display = 'block';
+    statusEl.innerHTML = '<span class="spinner"></span> Super Scan starting...';
+  }
+
+  const totals = { funnels: allBtns.length, pages: 0, ok: 0, bad: 0, blocked: 0, unknown: 0 };
+  try {
+    for (let i = 0; i < allBtns.length; i++) {
+      const scanBtn = allBtns[i];
+      const funnelName = scanBtn.dataset.name || 'Funnel ' + (i + 1);
+      if (statusEl) statusEl.innerHTML = '<span class="spinner"></span> Super Scan ' + (i + 1) + '/' + allBtns.length + ': ' + esc(funnelName);
+      const summary = await scanAllPages(locId, scanBtn.dataset.fid, scanBtn, true);
+      totals.pages += (summary && summary.total) || 0;
+      totals.ok += (summary && summary.ok) || 0;
+      totals.bad += (summary && summary.bad) || 0;
+      totals.blocked += (summary && summary.blocked) || 0;
+      totals.unknown += (summary && summary.unknown) || 0;
+      await sleep(300);
+    }
+
+    if (statusEl) {
+      statusEl.innerHTML = `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <span style="font-weight:700;">Super Scan complete</span>
+        <span style="background:var(--surface2);border:1px solid var(--border);font-size:11px;font-weight:700;padding:2px 8px;border-radius:50px;">${totals.funnels} funnels</span>
+        <span style="background:var(--surface2);border:1px solid var(--border);font-size:11px;font-weight:700;padding:2px 8px;border-radius:50px;">${totals.pages} pages</span>
+        <span style="background:var(--success);color:#fff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:50px;">${totals.ok} correct</span>
+        ${totals.bad ? '<span style="background:var(--error);color:#fff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:50px;">'+totals.bad+' incorrect</span>' : ''}
+        ${totals.blocked ? '<span style="background:var(--warning);color:#fff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:50px;">'+totals.blocked+' blocked</span>' : ''}
+        ${totals.unknown ? '<span style="background:var(--surface);color:var(--text3);border:1px solid var(--border);font-size:11px;font-weight:700;padding:2px 8px;border-radius:50px;">'+totals.unknown+' unknown</span>' : ''}
+      </div>`;
+    }
+  } catch(e) {
+    if (statusEl) statusEl.innerHTML = '<span style="color:var(--error);">Super Scan error: ' + esc(e.message) + '</span>';
+  } finally {
+    btn.textContent = orig;
     btn.disabled = false;
   }
 }
@@ -1287,7 +1600,7 @@ async function scanFunnelTracking(locId, funnelId, btn) {
     if (!funnel) { statusEl.innerHTML = '<div style="padding:10px;color:var(--error);">Funnel not found</div>'; return; }
 
     const steps = funnel.steps || [];
-    const domain = getDomain(locId) || '';
+    const domain = getDomainForLoc(locId) || '';
     const expectedPixel = getPixelForDomain(domain);
     const results = [];
 
@@ -1423,7 +1736,7 @@ async function injectPixelToFunnel(locId, funnelId, currentHead, btn) {
   btn.textContent = '...';
   btn.disabled = true;
 
-  const domain = getDomain(locId) || '';
+  const domain = getDomainForLoc(locId) || '';
   const pixel = getPixelForDomain(domain);
   if (!pixel) {
     showToast('No pixel defined for domain: ' + domain);
@@ -1585,11 +1898,12 @@ function showBookmarklet() {
 }
 
 
-async function scanPageInFrame(url, btn) {
+async function scanPageInFrame(url, btn, locId, requiresFormTracking, requiresFooterTracking, forceScan) {
   const pageRow = btn.closest('.sf-page');
   let resultEl = pageRow ? pageRow.nextElementSibling : null;
+  let scanResult = null;
   
-  if (resultEl && resultEl.style.display !== 'none') {
+  if (!forceScan && resultEl && resultEl.style.display !== 'none') {
     resultEl.style.display = 'none';
     btn.textContent = 'Scan';
     return;
@@ -1604,30 +1918,42 @@ async function scanPageInFrame(url, btn) {
   btn.disabled = true;
 
   try {
-    const resp = await fetch(url, {
-      method: 'GET',
-      cache: 'no-store',
-      credentials: 'omit'
-    });
-
-    if (!resp.ok) {
-      if (resultEl) resultEl.innerHTML = '<span style="color:var(--error);">HTTP ' + resp.status + ' — cannot read page</span>';
-      return;
+    const fetched = await fetchPageHtmlForScan(url);
+    if (!fetched.html) {
+      if (resultEl) resultEl.innerHTML = '<span style="color:var(--error);">' + esc(fetched.error || 'Cannot read page') + '</span>';
+      scanResult = { ok: false, status: 'blocked', pageName: btn.dataset.name || '', error: fetched.error || 'Cannot read page' };
+      return scanResult;
     }
 
-    const html = await resp.text();
-
-    // Check for pixel and UTM
-    const hasPixel = html.includes('fbq(') || html.includes('fbevents.js') || html.includes('Meta Pixel');
-    const hasUTM = html.includes('user_ip_address') || html.includes('fbclid');
-    const pixelMatch = html.match(/fbq\('init',\s*['"]?(\d+)['"]?\)/);
-    const pixelId = pixelMatch ? pixelMatch[1] : '';
+    const details = extractTrackingScanDetails(fetched.html);
+    const hasPixel = details.hasPixel;
+    const hasUTM = details.hasUTM;
+    const pixelId = details.pixelId;
+    const expectedAcuityField = locId ? getAcuityField(locId) : '';
+    const scanDomain = (() => { try { return new URL(url).hostname; } catch(e) { return ''; } })();
+    const expectedPixel = getPixelForDomain(scanDomain);
+    const expectedCode = locId ? getExpectedScanCode(locId, scanDomain, expectedPixel, requiresFormTracking, requiresFooterTracking) : '';
     const knownPixels = {
       '1180664739949233': 'First Touch Beauty',
       '540031443835405': 'No Needle Needed',
       '819221296693583': 'Adv Beauty Treatments'
     };
     const brand = knownPixels[pixelId] || '';
+    const detailId = 'pdetail-' + Math.random().toString(36).slice(2);
+    const acuityOk = !requiresFooterTracking || !expectedAcuityField || (details.foundAcuityField && details.foundAcuityField === expectedAcuityField);
+    const ok = !!hasPixel &&
+      (!requiresFormTracking || !!hasUTM) &&
+      (!requiresFooterTracking || (!!details.hasFooterScript && acuityOk));
+    scanResult = {
+      ok,
+      status: ok ? 'ok' : 'bad',
+      pageName: btn.dataset.name || '',
+      hasPixel,
+      hasUTM,
+      hasFooterScript: details.hasFooterScript,
+      foundAcuityField: details.foundAcuityField,
+      source: fetched.source
+    };
 
     if (resultEl) {
       resultEl.innerHTML = `
@@ -1636,17 +1962,38 @@ async function scanPageInFrame(url, btn) {
             ${hasPixel ? '✓ FB Pixel' : '✗ No FB Pixel'}
           </span>
           ${pixelId ? '<span style="font-size:11px;background:rgba(24,119,242,0.1);color:#1877F2;padding:2px 8px;border-radius:50px;">' + pixelId + (brand?' — '+brand:'') + '</span>' : ''}
-          <span style="font-weight:700;color:${hasUTM?'var(--success)':'var(--error)'};">
-            ${hasUTM ? '✓ UTM Script' : '✗ No UTM Script'}
-          </span>
+          ${requiresFormTracking
+            ? '<span style="font-weight:700;color:'+(hasUTM?'var(--success)':'var(--error)')+';">'+(hasUTM ? '✓ UTM Script' : '✗ No UTM Script')+'</span>'
+            : '<span style="font-size:11px;color:var(--text3);">UTM not required</span>'}
+          ${requiresFooterTracking
+            ? '<span style="font-weight:700;color:'+(details.hasFooterScript?'var(--success)':'var(--error)')+';">'+(details.hasFooterScript ? '✓ Footer Script' : '✗ No Footer Script')+'</span>'
+            : '<span style="font-size:11px;color:var(--text3);">Footer not required</span>'}
+          <span style="font-size:10px;color:var(--text3);">Source: ${esc(fetched.source)}</span>
+          ${details.foundAcuityField ? '<span style="font-size:11px;background:rgba(24,119,242,0.1);color:#1877F2;padding:2px 8px;border-radius:50px;">Acuity: '+esc(details.foundAcuityField)+'</span>' : ''}
+          ${details.foundAcuityField && expectedAcuityField
+            ? '<span style="font-size:11px;background:'+(details.foundAcuityField===expectedAcuityField?'rgba(0,201,122,0.1)':'rgba(255,170,0,0.1)')+';color:'+(details.foundAcuityField===expectedAcuityField?'var(--success)':'var(--warning)')+';padding:2px 8px;border-radius:50px;">'+(details.foundAcuityField===expectedAcuityField?'✓ Acuity Match':'⚠ Expected '+esc(expectedAcuityField))+'</span>'
+            : ''}
+          <button onclick="toggleScanDetail('${detailId}')" style="background:none;border:1px solid var(--border2);color:var(--text3);font-size:10px;padding:1px 7px;border-radius:50px;cursor:pointer;font-family:var(--font);">View details scan</button>
+        </div>
+        <div id="${detailId}" style="display:none;margin-top:8px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px;font-size:11px;line-height:1.6;color:var(--text2);">
+          <div style="font-weight:700;margin-bottom:4px;font-size:10px;text-transform:uppercase;color:var(--text3);">Expected inserted code:</div>
+          <pre style="font-family:monospace;font-size:10px;white-space:pre-wrap;max-height:160px;overflow-y:auto;margin:0 0 8px 0;">${esc((requiresFormTracking || requiresFooterTracking) ? expectedCode : (expectedPixel ? 'EXPECTED FB PIXEL CODE:\n' + expectedPixel.code : 'No expected pixel found for domain: ' + scanDomain))}</pre>
+          <div style="font-weight:700;margin-bottom:4px;font-size:10px;text-transform:uppercase;color:var(--text3);">Inserted tracking code found:</div>
+          <pre style="font-family:monospace;font-size:10px;white-space:pre-wrap;max-height:140px;overflow-y:auto;margin:0;">${esc(details.codeSnippet||'(no matching tracking code found in page HTML)')}</pre>
+          <div style="font-weight:700;margin:8px 0 4px;font-size:10px;text-transform:uppercase;color:var(--text3);">Footer/body scripts:</div>
+          <pre style="font-family:monospace;font-size:10px;white-space:pre-wrap;max-height:140px;overflow-y:auto;margin:0;">${esc(details.footerSnippet||'(no footer/body script block found)')}</pre>
+          ${details.foundAcuityField ? '<div style="margin-top:6px;font-size:10px;"><strong>Acuity Field in page:</strong> '+esc(details.foundAcuityField)+'</div>' : ''}
+          ${details.foundAcuityField && expectedAcuityField ? '<div style="font-size:10px;color:'+(details.foundAcuityField===expectedAcuityField?'var(--success)':'var(--warning)')+'"><strong>Expected for this spa:</strong> '+esc(expectedAcuityField)+(details.foundAcuityField===expectedAcuityField?' ✓ Match':' ⚠ Mismatch')+'</div>' : ''}
         </div>`;
     }
   } catch(e) {
     if (resultEl) resultEl.innerHTML = '<span style="color:var(--error);">Error: ' + esc(e.message) + '</span>';
+    scanResult = { ok: false, status: 'blocked', pageName: btn.dataset.name || '', error: e.message };
   } finally {
     btn.textContent = 'Scan';
     btn.disabled = false;
   }
+  return scanResult;
 }
 
 
@@ -1882,9 +2229,19 @@ async function loadDashboard() {
     const l = allLocs.find(x => x.id === locId);
     const name = l ? (l.name || l.businessName || locId) : locId;
 
-    let totalLeads = 0, fbLeads = 0, apptLeads = 0;
+    let totalLeads = 0, fbLeads = 0, convertedLeads = 0;
     const campaigns = {};
     const sources = {};
+    if (!window._cfDefs) window._cfDefs = {};
+    if (!window._cfDefs[locId]) {
+      try {
+        const cfd = await apiFetch(tok, 'GET', '/locations/' + locId + '/customFields');
+        const fields = cfd.customFields || cfd.data || [];
+        window._cfDefs[locId] = {};
+        fields.forEach(f => { if(f.id) window._cfDefs[locId][f.id] = f.name || f.fieldKey || ''; });
+      } catch(e) { window._cfDefs[locId] = {}; }
+    }
+    const cfDefs2 = window._cfDefs[locId] || {};
 
     try {
       // Load contacts using GHL date filter params
@@ -1937,9 +2294,9 @@ async function loadDashboard() {
                      (attr.utmSource||'').toLowerCase().includes('facebook') ||
                      !!attr.fbclid;
         if (isFB) fbLeads++;
+        if (isConvertedLead(c, cfDefs2)) convertedLeads++;
 
         // Campaign from custom fields
-        const cfDefs2 = window._cfDefs && window._cfDefs[locId] || {};
         const allCF = c.customFields || [];
         let campName = '';
         allCF.forEach(f => {
@@ -1962,7 +2319,6 @@ async function loadDashboard() {
     } catch(e) { /* continue */ }
 
     // Load custom field defs for this location
-    if (!window._cfDefs) window._cfDefs = {};
     if (!window._cfDefs[locId]) {
       try {
         const cfd = await apiFetch(tok, 'GET', '/locations/' + locId + '/customFields');
@@ -1983,14 +2339,35 @@ async function loadDashboard() {
       .sort((a,b) => b[1]-a[1])
       .slice(0, 5);
 
-    cards.push({ name, locId, totalLeads, fbLeads, topCampaigns, topSources, maxCamp, days });
+    const conversionRate = totalLeads > 0 ? Math.round(convertedLeads / totalLeads * 100) : 0;
+    cards.push({ name, locId, totalLeads, fbLeads, convertedLeads, conversionRate, topCampaigns, topSources, maxCamp, days });
     await sleep(100);
   }
 
   // Render
   if (!cards.length) { el.innerHTML = '<div class="empty">No data loaded.</div>'; return; }
 
-  let html = '<div class="dash-grid">';
+  const ranked = [...cards].sort((a,b) => (b.conversionRate - a.conversionRate) || (b.convertedLeads - a.convertedLeads) || (b.totalLeads - a.totalLeads));
+  const maxLeads = Math.max(...ranked.map(c => c.totalLeads || 0), 1);
+  let html = `<div style="background:var(--surface);border:1.5px solid var(--border);border-radius:12px;margin-bottom:14px;overflow:hidden;">
+    <div style="padding:10px 14px;background:var(--surface2);border-bottom:1px solid var(--border);display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+      <span style="font-size:12px;font-weight:800;">Conversion Comparison</span>
+      <span style="font-size:11px;color:var(--text3);">Ranked by converted leads / total leads</span>
+    </div>`;
+  ranked.forEach((card, idx) => {
+    const leadWidth = Math.max(4, Math.round((card.totalLeads || 0) / maxLeads * 100));
+    html += `<div style="display:grid;grid-template-columns:34px 1fr 82px 82px 82px;gap:10px;align-items:center;padding:8px 14px;border-bottom:1px solid var(--border);font-size:12px;">
+      <div style="font-weight:800;color:${idx===0?'var(--success)':'var(--text3)'};">#${idx+1}</div>
+      <div style="min-width:0;">
+        <div style="font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(card.name)}</div>
+        <div style="height:5px;background:var(--surface2);border-radius:99px;margin-top:5px;overflow:hidden;"><div style="height:5px;width:${leadWidth}%;background:var(--accent);border-radius:99px;"></div></div>
+      </div>
+      <div style="text-align:right;"><strong>${card.conversionRate}%</strong><div style="font-size:10px;color:var(--text3);">conversion</div></div>
+      <div style="text-align:right;"><strong>${card.convertedLeads}</strong><div style="font-size:10px;color:var(--text3);">converted</div></div>
+      <div style="text-align:right;"><strong>${card.totalLeads}</strong><div style="font-size:10px;color:var(--text3);">leads</div></div>
+    </div>`;
+  });
+  html += '</div><div class="dash-grid">';
   cards.forEach(card => {
     const fbPct = card.totalLeads > 0 ? Math.round(card.fbLeads/card.totalLeads*100) : 0;
     html += `<div class="dash-card">
@@ -2010,6 +2387,10 @@ async function loadDashboard() {
         <div class="dash-stat">
           <div class="dash-stat-val" style="color:#1877F2;">${fbPct}%</div>
           <div class="dash-stat-lbl">FB Rate</div>
+        </div>
+        <div class="dash-stat">
+          <div class="dash-stat-val success">${card.conversionRate}%</div>
+          <div class="dash-stat-lbl">Conversion</div>
         </div>
       </div>`;
 
@@ -2151,7 +2532,7 @@ async function injectPixelToAllFunnels(locId) {
       const funnelName = funnel.name || funnel.title || funnelId;
 
       // Get domain for this funnel
-      const domain = getDomain(locId) || '';
+      const domain = getDomainForLoc(locId) || '';
       const pixel = getPixelForDomain(domain);
 
       if (!pixel) {
@@ -2323,11 +2704,11 @@ async function guardarToken(id) {
   } else {
     // Auto-save from CSV if available
     const loc = allLocs.find(l => l.id === id);
-    if (loc) {
-      const csvDomain = getDomainFromCSV(loc.name || loc.businessName || '');
-      if (csvDomain) saveDomain(id, csvDomain);
-    }
+    const csvDomain = loc ? getDomainForLoc(loc) : '';
+    if (csvDomain) saveDomain(id, csvDomain);
   }
+  const ainp = document.getElementById('ai-' + id);
+  if (ainp) saveAcuityField(id, ainp.value.trim());
   renderLocs(allLocs);
 
   const panel = document.getElementById('inline-cv-' + id);
@@ -2484,14 +2865,17 @@ const ACUITY_FIELDS = {
 };
 
 function getAcuityField(locId) {
+  const saved = loadSavedAcuityFields()[locId];
+  if (saved) return saved;
   const loc = allLocs.find(l => l.id === locId);
   const name = loc ? (loc.name || loc.businessName || '') : '';
   // Try exact match first
   if (ACUITY_FIELDS[name]) return ACUITY_FIELDS[name];
   // Try fuzzy match
-  const nl = name.toLowerCase();
+  const nl = normalizeSpaName(name);
   for (const [k, v] of Object.entries(ACUITY_FIELDS)) {
-    if (nl.includes(k.toLowerCase()) || k.toLowerCase().includes(nl)) return v;
+    const nk = normalizeSpaName(k);
+    if (nl && nk && (nl.includes(nk) || nk.includes(nl))) return v;
   }
   return '';
 }
@@ -2793,7 +3177,7 @@ async function loadSF(locId, tabEl) {
   let funnels = [], sites = [], domainMap = {};
 
   // 1. Manually saved domain
-  const savedDomain = getDomain(locId);
+  const savedDomain = getDomainForLoc(locId);
   if (savedDomain) domainMap['_saved'] = savedDomain;
 
   // 2. CSV pre-loaded domain by location name
@@ -2854,7 +3238,10 @@ async function loadSF(locId, tabEl) {
 
   // Funnels section
   html += '<div class="sf-section">';
-  html += '<div class="sf-section-title">&#128249; Funnels (' + funnels.length + ')</div>';
+  html += `<div class="sf-section-title" style="display:flex;align-items:center;gap:8px;">
+    <span style="flex:1;">&#128249; Funnels (${funnels.length})</span>
+    ${funnels.length ? `<button class="copy-btn" style="border-color:var(--accent);color:var(--accent);font-weight:700;" onclick="superScanAllFunnels('${locId}',this)">Super Scan</button>` : ''}
+  </div>`;
   if (!funnels.length) {
     html += '<div class="sf-empty">No funnels found.</div>';
   } else {
@@ -2862,14 +3249,14 @@ async function loadSF(locId, tabEl) {
       // Steps come directly inside the funnel object
       const steps = f.steps || [];
       // Get domain: API map -> saved -> CSV -> funnel fields
-      const domain = domainMap[f.domainId] || domainMap['_saved'] || domainMap['_csv'] || f.domain || f.domainName || f.url || '';
+      const domain = domainMap[f.domainId] || domainMap['_saved'] || domainMap['_csv'] || f.domain || f.domainName || f.url || getDomainForLoc(locId) || '';
 
       const fId = f.id || f._id || '';
       html += `<div class="sf-card" id="sf-${fId}">
         <div class="sf-card-header" onclick="toggleSFCard('sf-${fId}')">
           <div class="sf-card-name">${esc(f.name||f.title||'Unnamed')}</div>
           <div class="sf-card-count">${steps.length} step${steps.length!==1?'s':''}</div>
-          <button class="copy-btn" style="flex-shrink:0;" onclick="event.stopPropagation();scanAllPages('${locId}','${fId}',this)">Scan All</button>
+          <button class="copy-btn sf-scan-all-btn" data-fid="${esc(fId)}" data-name="${esc(f.name||f.title||'Unnamed')}" style="flex-shrink:0;" onclick="event.stopPropagation();scanAllPages('${locId}','${fId}',this)">Scan All</button>
           <button class="copy-btn" style="flex-shrink:0;" onclick="event.stopPropagation();copyTrackingScript(this)">Copy Script</button>
           <div class="sf-card-toggle">&#9660;</div>
         </div>
@@ -2885,14 +3272,9 @@ async function loadSF(locId, tabEl) {
           // Build URL: https://DOMAIN/STEP_SLUG
           // Step slug is the full path after the domain
           const slug = step.slug || step.path || step.url || '';
-          let fullUrl = '';
-          if (slug.startsWith('http')) {
-            fullUrl = slug;
-          } else if (domain) {
-            const cleanDomain = domain.replace(/^https?:\/\//, '').replace(/\/$/, '');
-            const cleanSlug = slug.replace(/^\//, '');
-            fullUrl = 'https://' + cleanDomain + '/' + cleanSlug;
-          }
+          const fullUrl = buildStepUrl(step, domain);
+          const requiresFormTracking = isFormStep(step);
+          const requiresFooterTracking = isBookingStep(step);
 
           const stepSlug = slug.replace(/^\//, '');
           html += `<div class="sf-page">
@@ -2901,7 +3283,7 @@ async function loadSF(locId, tabEl) {
               <div class="sf-page-name">${esc(stepName)}</div>
             </div>
             <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
-              ${fullUrl ? `<button class="copy-btn" style="border-color:var(--accent);color:var(--accent);" onclick="scanPageInFrame('${fullUrl}',this)">Scan</button>` : ''}
+              ${fullUrl ? `<button class="copy-btn sf-scan-btn" data-url="${esc(fullUrl)}" data-name="${esc(stepName)}" data-form="${requiresFormTracking}" data-footer="${requiresFooterTracking}" style="border-color:var(--accent);color:var(--accent);" onclick="scanPageInFrame('${fullUrl}',this,'${locId}',${requiresFormTracking},${requiresFooterTracking})">Scan</button>` : ''}
               ${fullUrl
                 ? `<span class="sf-page-link" onclick="window.open('${fullUrl}','_blank')" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(fullUrl)}</span>
                    <button class="copy-btn" onclick="copyLink('${fullUrl}',this)">Copy</button>`
@@ -2945,16 +3327,18 @@ async function loadSF(locId, tabEl) {
   // Add inject pixel button
   const pixelBar = document.getElementById('sfPixelBar');
   if (pixelBar) {
+    const locDomain = getDomainForLoc(locId) || '';
+    const locPixel = getPixelForDomain(locDomain);
     pixelBar.style.display = 'flex';
     pixelBar.innerHTML = `
-      <div style="font-size:11px;color:var(--text2);">Domain: <strong>${esc(getDomain(locId)||'not set')}</strong></div>
-      ${getPixelForDomain(getDomain(locId)||'') ? 
-        '<span style="font-size:11px;color:var(--success);">Pixel: ' + (getPixelForDomain(getDomain(locId)||'')||{}).pixel + '</span>' :
+      <div style="font-size:11px;color:var(--text2);">Domain: <strong>${esc(locDomain||'not set')}</strong></div>
+      ${locPixel ? 
+        '<span style="font-size:11px;color:var(--success);">Pixel: ' + locPixel.pixel + '</span>' :
         '<span style="font-size:11px;color:var(--warning);">No pixel match for this domain</span>'
       }
       <button class="btn btn-sm" id="btnInjectPixel-${locId}" onclick="injectPixelToAllFunnels('${locId}')"
         style="border-radius:50px;background:#1877F2;margin-left:auto;" 
-        ${getPixelForDomain(getDomain(locId)||'') ? '' : 'disabled'}>
+        ${locPixel ? '' : 'disabled'}>
         Inject FB Pixel to All Funnels
       </button>`;
   }
@@ -3127,8 +3511,16 @@ async function conectar() {
 function renderLocs(list) {
   const el = document.getElementById('locList');
   if (!list.length) { el.innerHTML = '<div class="empty">No results</div>'; return; }
-  el.innerHTML = list.map(l => {
+  const domainOptions = Object.entries(CSV_DOMAINS).map(([name, domain]) =>
+    `<option value="${esc(domain)}">${esc(name)}</option>`
+  ).join('');
+  el.innerHTML = '<datalist id="spaDomainList">' + domainOptions + '</datalist>' + list.map(l => {
     const tok = getToken(l.id);
+    const domainValue = getDomainForLoc(l);
+    const domainSource = loadDomains()[l.id] ? 'saved' : (domainValue ? 'auto list' : '');
+    const savedAcuity = loadSavedAcuityFields()[l.id] || '';
+    const acuityValue = getAcuityField(l.id);
+    const acuitySource = savedAcuity ? 'saved' : (acuityValue ? 'library' : '');
     return `<div class="loc-item ${selected.has(l.id)?'sel':''}" id="li-${l.id}">
       <div class="loc-main" onclick="toggleLoc('${l.id}')">
         <div class="chk"><span class="chk-mark">✓</span></div>
@@ -3141,11 +3533,13 @@ function renderLocs(list) {
       </div>
       <div class="tok-expand" id="te-${l.id}">
         <div class="tok-row" style="flex-wrap:wrap;gap:6px;">
-          <input class="tok-input" type="password" id="ti-${l.id}" placeholder="pit-... (sub-account token)" value="${esc(tok)}" autocomplete="off" style="flex:1;min-width:180px;">
-          <input class="tok-input" type="text" id="di-${l.id}" placeholder="Domain e.g. mysite.advancedbeautytreatments.com" value="${esc(getDomain(l.id))}" autocomplete="off" style="flex:1;min-width:180px;font-family:var(--font);">
-          <div style="font-size:10px;color:var(--text3);padding:2px 4px;width:100%;">Acuity Field: <strong style="color:var(--accent);">${getAcuityField(l.id) || 'Not found — check CSV'}</strong></div>
-          <button class="btn btn-sm" onclick="guardarToken(\'${l.id}\')">Save</button>
-          ${tok ? `<button class="btn btn-ghost btn-sm" onclick="removeToken(\'${l.id}\')">Remove</button>` : ''}
+          <input class="tok-input" type="password" id="ti-${l.id}" placeholder="pit-... sub-account token" value="${esc(tok)}" autocomplete="off" style="flex:1;min-width:180px;">
+          <input class="tok-input" type="text" id="di-${l.id}" list="spaDomainList" placeholder="Domain e.g. mysite.firstouchbeauty.com" value="${esc(domainValue)}" autocomplete="off" style="flex:1;min-width:180px;">
+          <input class="tok-input" type="text" id="ai-${l.id}" placeholder="Acuity field e.g. field:12345678" value="${esc(acuityValue)}" autocomplete="off" style="flex:1;min-width:170px;">
+          ${domainSource ? '<div style="font-size:10px;color:var(--text3);padding:2px 0;">Domain: <strong style="color:var(--success);">'+esc(domainSource)+'</strong></div>' : '<div style="font-size:10px;color:var(--warning);padding:2px 0;">Domain not found in local list</div>'}
+          ${acuitySource ? '<div style="font-size:10px;color:var(--text3);padding:2px 0;">Acuity: <strong style="color:var(--accent);">'+esc(acuitySource)+'</strong></div>' : '<div style="font-size:10px;color:var(--warning);padding:2px 0;">Acuity not found</div>'}
+          <button class="btn btn-sm" onclick="guardarToken('${l.id}')">Save</button>
+          ${tok ? '<button class="btn btn-ghost btn-sm" onclick="removeToken(\'' + l.id + '\')" >Remove</button>' : ''}
         </div>
       </div>
       <div class="inline-cv-panel" id="inline-cv-${l.id}"></div>
@@ -3332,13 +3726,18 @@ window.addEventListener('DOMContentLoaded', async function() {
         const merged = { ...JSON.parse(sharedDomains.value), ...existing };
         localStorage.setItem(DOMAIN_KEY, JSON.stringify(merged));
       }
+      const sharedAcuity = await window.storage.get(ACUITY_KEY, true);
+      if (sharedAcuity) {
+        const existing = loadSavedAcuityFields();
+        const merged = { ...JSON.parse(sharedAcuity.value), ...existing };
+        localStorage.setItem(ACUITY_KEY, JSON.stringify(merged));
+      }
     }
   } catch(e) {}
 
   if (t && c) setTimeout(() => conectar(), 400);
 });
 
-</script>
 </script>
 </body>
 </html>
